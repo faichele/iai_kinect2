@@ -37,7 +37,11 @@
 #define FG_CYAN         "\033[36m"
 
 const std::string getFunctionName(const std::string &name);
+#ifdef _WIN32
+#define OUT_AUX(FUNC_COLOR, MSG_COLOR, STREAM, MSG) STREAM(MSG_COLOR << MSG << NO_COLOR)
+#else
 #define OUT_AUX(FUNC_COLOR, MSG_COLOR, STREAM, MSG) STREAM(FUNC_COLOR "[" << getFunctionName(__PRETTY_FUNCTION__) << "] " MSG_COLOR << MSG << NO_COLOR)
+#endif
 
 #define OUT_DEBUG(msg) OUT_AUX(FG_BLUE, NO_COLOR, ROS_DEBUG_STREAM, msg)
 #define OUT_INFO(msg) OUT_AUX(FG_GREEN, NO_COLOR, ROS_INFO_STREAM, msg)

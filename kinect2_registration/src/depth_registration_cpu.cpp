@@ -117,7 +117,11 @@ void DepthRegistrationCPU::remapDepth(const cv::Mat &depth, cv::Mat &scaled) con
 {
   scaled.create(sizeRegistered, CV_16U);
   #pragma omp parallel for
+#ifdef _WIN32
+  for(int r = 0; r < (int)sizeRegistered.height; ++r)
+#else
   for(size_t r = 0; r < (size_t)sizeRegistered.height; ++r)
+#endif
   {
     uint16_t *itO = scaled.ptr<uint16_t>(r);
     const float *itX = mapX.ptr<float>(r);
@@ -134,7 +138,11 @@ void DepthRegistrationCPU::projectDepth(const cv::Mat &scaled, cv::Mat &register
   registered = cv::Mat::zeros(sizeRegistered, CV_16U);
 
   #pragma omp parallel for
+#ifdef _WIN32
+  for(int r = 0; r < (int)sizeRegistered.height; ++r)
+#else
   for(size_t r = 0; r < (size_t)sizeRegistered.height; ++r)
+#endif
   {
     const uint16_t *itD = scaled.ptr<uint16_t>(r);
     const double y = lookupY.at<double>(0, r);

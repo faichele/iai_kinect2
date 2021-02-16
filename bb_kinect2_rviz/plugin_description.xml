@@ -1,0 +1,10 @@
+<library path="lib/bb_kinect2_rviz">
+  <class name="bb_kinect2_rviz/PersonsDisplay"
+         type="bb_kinect2_rviz::PersonsDisplay"
+         base_class_type="rviz::Display">
+    <description>
+      Displays persons tracked by a Kinect2 sensor.
+    </description>
+    <message_type>bb_kinect2_msgs/Person</message_type>
+  </class>
+</library>

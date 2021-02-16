@@ -1,30 +1,43 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(kinect2_bridge CXX)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBT_USE_DOUBLE_PRECISION -Wall")
-# Unused warnings
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wuninitialized -Winit-self -Wunused-function -Wunused-label -Wunused-variable -Wunused-but-set-variable -Wunused-but-set-parameter")
-# Additional warnings
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Warray-bounds -Wtype-limits -Wreturn-type -Wsequence-point -Wparentheses -Wmissing-braces -Wchar-subscripts -Wswitch -Wwrite-strings -Wenum-compare -Wempty-body -Wlogical-op")
+if (UNIX)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBT_USE_DOUBLE_PRECISION -Wall")
+	# Unused warnings
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wuninitialized -Winit-self -Wunused-function -Wunused-label -Wunused-variable -Wunused-but-set-variable -Wunused-but-set-parameter")
+	# Additional warnings
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Warray-bounds -Wtype-limits -Wreturn-type -Wsequence-point -Wparentheses -Wmissing-braces -Wchar-subscripts -Wswitch -Wwrite-strings -Wenum-compare -Wempty-body -Wlogical-op")
 
-# Check for c++11 support
-INCLUDE(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-IF(COMPILER_SUPPORTS_CXX11)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-ELSEIF(COMPILER_SUPPORTS_CXX0X)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-ELSE()
-  MESSAGE(ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
-ENDIF()
+	# Check for c++11 support
+	INCLUDE(CheckCXXCompilerFlag)
+	CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+	CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+	IF(COMPILER_SUPPORTS_CXX11)
+	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+	ELSEIF(COMPILER_SUPPORTS_CXX0X)
+	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+	ELSE()
+	  MESSAGE(ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+	ENDIF()
+endif()
 
-find_package(freenect2 REQUIRED HINTS "$ENV{HOME}/freenect2")
+# additional cmake modules
+LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+if (UNIX)
+	find_package(freenect2 REQUIRED HINTS "$ENV{HOME}/freenect2")
+elseif (WIN32)
+	find_package(Kinect2SDK REQUIRED)
+        find_package(Qt5Core REQUIRED)
+        find_package(Qt5WinExtras REQUIRED)
+endif()
 
 find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration bb_kinect2_msgs)
 
 ## System dependencies are found with CMake's conventions
 find_package(OpenCV REQUIRED)
+
+find_package( PCL 1.8 REQUIRED )
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -41,23 +54,23 @@ find_package(OpenCV REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES kinect2_bridge
   CATKIN_DEPENDS kinect2_registration
-#  DEPENDS system_lib
 )
 
 ###########
 ## Build ##
 ###########
 
-# Display additional files in qtcreator
-execute_process(COMMAND find ${PROJECT_SOURCE_DIR} -type f OUTPUT_VARIABLE FILES_STRING)
-string(REPLACE "\n" ";" FILES_LIST ${FILES_STRING})
-add_custom_target(additional_files_${PROJECT_NAME}
-  SOURCES
-  ${FILES_LIST}
-  ${PROJECT_SOURCE_DIR}/../README.md
-)
+if (UNIX)
+	# Display additional files in qtcreator
+	execute_process(COMMAND find ${PROJECT_SOURCE_DIR} -type f OUTPUT_VARIABLE FILES_STRING)
+	string(REPLACE "\n" ";" FILES_LIST ${FILES_STRING})
+	add_custom_target(additional_files_${PROJECT_NAME}
+	  SOURCES
+	  ${FILES_LIST}
+	  ${PROJECT_SOURCE_DIR}/../README.md
+	)
+endif()
 
 include_directories(include
   ${catkin_INCLUDE_DIRS}
@@ -65,6 +78,17 @@ include_directories(include
   ${freenect2_INCLUDE_DIRS}
   ${kinect2_registration_INCLUDE_DIRS}
 )
+
+if (WIN32)
+    include_directories(${KinectSDK2_INCLUDE_DIRS}
+                        ${Qt5Core_INCLUDE_DIRS}
+                        ${Qt5WinExtras_INCLUDE_DIRS}
+                        ${PCL_INCLUDE_DIRS})
+
+    add_definitions(${PCL_DEFINITIONS})
+
+    link_directories(${PCL_LIBRARY_DIRS})
+endif()
 
 if(DEPTH_REG_OPENCL)
   add_definitions(-DDEPTH_REG_OPENCL)
@@ -74,20 +98,37 @@ if(DEPTH_REG_CPU)
 endif()
 add_definitions(-DK2_CALIB_PATH="${PROJECT_SOURCE_DIR}/data/")
 
-add_library(kinect2_bridge_nodelet SHARED src/kinect2_bridge.cpp)
+set(kinect2_bridge_HEADERS include/kinect2_bridge/kinect2_bridge.h)
+set(kinect2_bridge_SOURCES src/kinect2_bridge.cpp
+                           src/kinect2_bridge_main.cpp)
+
+if (WIN32)
+    list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_windows.cpp)
+else()
+    list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_linux.cpp)
+endif()
+
+add_library(kinect2_bridge_nodelet SHARED ${kinect2_bridge_HEADERS} ${kinect2_bridge_SOURCES})
 target_link_libraries(kinect2_bridge_nodelet
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   ${freenect2_LIBRARY}
   ${kinect2_registration_LIBRARY}
+  ${KinectSDK2_LIBRARIES}
+  ${Qt5Core_LIBRARIES}
+  ${Qt5WinExtras_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
-add_executable(kinect2_bridge src/kinect2_bridge.cpp)
+add_executable(kinect2_bridge ${kinect2_bridge_HEADERS} ${kinect2_bridge_SOURCES})
 target_link_libraries(kinect2_bridge
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   ${freenect2_LIBRARY}
   ${kinect2_registration_LIBRARY}
+  ${KinectSDK2_LIBRARIES}
+  ${Qt5Core_LIBRARIES}
+  ${Qt5WinExtras_LIBRARIES}
 )
 
 #############
