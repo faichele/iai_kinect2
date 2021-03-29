@@ -79,6 +79,7 @@ void PersonVisual::setMessage(const bb_kinect2_msgs::Person::ConstPtr& msg)
         joint_spheres_[k]->setPosition(jointPos);
 
         joint_transforms_[k]->header.stamp = ros::Time::now();
+        joint_transforms_[k]->child_frame_id = jointNameFromJointID((JointType) k, msg->tracking_id, msg->tracking_index);
 
         joint_transforms_[k]->transform.translation.x = msg->joints3D[k].x;
         joint_transforms_[k]->transform.translation.y = msg->joints3D[k].y;
@@ -187,90 +188,98 @@ void PersonVisual::setCylinderRadius(float radius)
 
 }
 
-std::string PersonVisual::jointNameFromJointID(JointType type)
+std::string PersonVisual::jointNameFromJointID(JointType type, int tracking_id, int tracking_index)
 {
+    std::string jointID;
     switch (type)
     {
         case JointType_SpineBase:
-            return "SpineBase";
+            jointID = "SpineBase";
             break;
         case JointType_SpineMid:
-            return "SpineMid";
+            jointID = "SpineMid";
             break;
         case JointType_Neck:
-            return "Neck";
+            jointID = "Neck";
             break;
         case JointType_Head:
-            return "Head";
+            jointID = "Head";
             break;
         case JointType_ShoulderLeft:
-            return "ShoulderLeft";
+            jointID = "ShoulderLeft";
             break;
         case JointType_ElbowLeft:
-            return "ElbowLeft";
+            jointID = "ElbowLeft";
             break;
         case JointType_WristLeft:
-            return "WristLeft";
+            jointID = "WristLeft";
             break;
         case JointType_HandLeft:
-            return "HandLeft";
+            jointID = "HandLeft";
             break;
         case JointType_ShoulderRight:
-            return "ShoulderRight";
+            jointID = "ShoulderRight";
             break;
         case JointType_ElbowRight:
-            return "ElbowRight";
+            jointID = "ElbowRight";
             break;
         case JointType_WristRight:
-            return "WristRight";
+            jointID = "WristRight";
             break;
         case JointType_HandRight:
-            return "HandRight";
+            jointID = "HandRight";
             break;
         case JointType_HipLeft:
-            return "HipLeft";
+            jointID = "HipLeft";
             break;
         case JointType_KneeLeft:
-            return "KneeLeft";
+            jointID = "KneeLeft";
             break;
         case JointType_AnkleLeft:
-            return "AnkleLeft";
+            jointID = "AnkleLeft";
             break;
         case JointType_FootLeft:
-            return "FootLeft";
+            jointID = "FootLeft";
             break;
         case JointType_HipRight:
-            return "HipRight";
+            jointID = "HipRight";
             break;
         case JointType_KneeRight:
-            return "KneeRight";
+            jointID = "KneeRight";
             break;
         case JointType_AnkleRight:
-            return "AnkleRight";
+            jointID = "AnkleRight";
             break;
         case JointType_FootRight:
-            return "FootRight";
+            jointID = "FootRight";
             break;
         case JointType_SpineShoulder:
-            return "SpineShoulder";
+            jointID = "SpineShoulder";
             break;
         case JointType_HandTipLeft:
-            return "HandTipLeft";
+            jointID = "HandTipLeft";
             break;
         case JointType_ThumbLeft:
-            return "ThumbLeft";
+            jointID = "ThumbLeft";
             break;
         case JointType_HandTipRight:
-            return "HandTipRight";
+            jointID = "HandTipRight";
             break;
         case JointType_ThumbRight:
-            return "ThumbRight";
+            jointID = "ThumbRight";
             break;
         default:
-            return "Unknown";
+            jointID = "Unknown";
             break;
     }
-    return "Unknown";
+
+    if (tracking_id >= 0)
+        jointID += "_" + std::to_string(tracking_id);
+
+    if (tracking_index >= 0)
+        jointID += "_" + std::to_string(tracking_index);
+
+    return jointID;
 }
 
 void PersonVisual::createPersonShapes()

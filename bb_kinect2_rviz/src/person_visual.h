@@ -103,7 +103,7 @@ namespace bb_kinect2_rviz
         private:
             void createPersonShapes();
 
-            std::string jointNameFromJointID(JointType type);
+            std::string jointNameFromJointID(JointType type, int tracking_id = -1, int tracking_index = -1);
             void updateLimbArrow(const bb_kinect2_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index);
 
             // The objects implementing the actual "stick figure" representing a person

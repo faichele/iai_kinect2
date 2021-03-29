@@ -167,7 +167,7 @@ bool Kinect2Bridge::initialize()
     priv_nh.param("queue_size", queueSize, 2);
     priv_nh.param("bilateral_filter", bilateral_filter, true);
     priv_nh.param("edge_aware_filter", edge_aware_filter, true);
-    priv_nh.param("publish_tf", publishTF, false);
+    priv_nh.param("publish_tf", publishTF, true);
     priv_nh.param("base_name_tf", baseNameTF, base_name);
     priv_nh.param("worker_threads", worker_threads, 4);
 
@@ -1298,7 +1298,7 @@ void Kinect2Bridge::publishStaticTF()
     tf::Vector3 vZero(0, 0, 0);
     tf::Transform tIr(rot, trans), tZero(qZero, vZero);
 
-    stMapToKinect2 = tf::StampedTransform(tZero, now, std::string("map"), baseNameTF + K2_TF_LINK);
+    stMapToKinect2 = tf::StampedTransform(tZero, now, std::string("kinect2_origin"), baseNameTF + K2_TF_LINK);
 
     stColorOpt = tf::StampedTransform(tZero, now, baseNameTF + K2_TF_LINK, baseNameTF + K2_TF_RGB_OPT_FRAME);
     stIrOpt = tf::StampedTransform(tIr, now, baseNameTF + K2_TF_RGB_OPT_FRAME, baseNameTF + K2_TF_IR_OPT_FRAME);
