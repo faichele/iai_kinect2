@@ -117,6 +117,44 @@ public:
         BOTH
     };
 
+    struct ImagePublisherOption
+    {
+    public:
+            bool valid;
+            Image imageType;
+            bool publishCompressed;
+            bool publish;
+
+            ImagePublisherOption() : imageType(COUNT), publish(false), publishCompressed(false), valid(false)
+            {
+
+            }
+
+            ImagePublisherOption(const ImagePublisherOption& other)
+            {
+                if (this != &other)
+                {
+                    imageType = other.imageType;
+                    publish = other.publish;
+                    publishCompressed = other.publishCompressed;
+                    valid = other.valid;
+                }
+            }
+
+            ImagePublisherOption& operator=(const ImagePublisherOption& other)
+            {
+                if (this != &other)
+                {
+                    imageType = other.imageType;
+                    publish = other.publish;
+                    publishCompressed = other.publishCompressed;
+                    valid = other.valid;
+                }
+
+                return *this;
+            }
+    };
+
 private:
     bool initialize();
     bool initRegistration(const std::string &method, const int32_t device, const double maxDepth);
@@ -195,10 +233,20 @@ private:
     double deltaT, depthShift, elapsedTimeColor, elapsedTimeIrDepth;
     bool running, deviceActive, clientConnected, isSubscribedColor, isSubscribedDepth;
 
-    std::vector<ros::Publisher> imagePubs, compressedPubs;
+    std::vector<std::string> imageTopics;
+    std::vector<bool> publishCompressedImages;
+    std::map<Image, ros::Publisher> imagePubs, compressedPubs;
     ros::Publisher infoHDPub, infoQHDPub, infoIRPub;
     sensor_msgs::CameraInfo infoHD, infoQHD, infoIR;
     std::vector<Status> status;
+
+    Image stringToImageType(const std::string&);
+    bool retrieveImagePubOptions();
+    const ImagePublisherOption& getImagePublisherOption(const Image);
+
+    static ImagePublisherOption emptyImagePublisherOption;
+    bool imagePubOptionsRetrieved;
+    std::vector<ImagePublisherOption> imagePublisherOptions;
 };
 
 class Kinect2BridgeNodelet : public nodelet::Nodelet

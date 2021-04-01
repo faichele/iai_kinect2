@@ -162,12 +162,11 @@ install(DIRECTORY include/${PROJECT_NAME}/
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 install(DIRECTORY
   launch
-  # myfile2
+  config
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 install(FILES
   nodelet_plugins.xml
-  # myfile2
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 

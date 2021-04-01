@@ -23,11 +23,14 @@
 #include "kinect2_bridge/kinect2_bridge_private_linux.h"
 #endif
 
+Kinect2Bridge::ImagePublisherOption Kinect2Bridge::emptyImagePublisherOption = Kinect2Bridge::ImagePublisherOption();
+
 Kinect2Bridge::Kinect2Bridge(const ros::NodeHandle &nh, const ros::NodeHandle &priv_nh)
     : sizeColor(1920, 1080), sizeIr(512, 424), sizeLowRes(sizeColor.width / 2, sizeColor.height / 2),
       // color(sizeColor.width, sizeColor.height, 4), nh(nh), priv_nh(priv_nh),
       frameColor(0), frameIrDepth(0), pubFrameColor(0), pubFrameIrDepth(0), lastColor(0, 0), lastDepth(0, 0), nextColor(false),
-      nextIrDepth(false), depthShift(0), running(false), deviceActive(false), clientConnected(false)
+      nextIrDepth(false), depthShift(0), running(false), deviceActive(false), clientConnected(false),
+      imagePubOptionsRetrieved(false)
 {
     status.resize(COUNT, UNSUBCRIBED);
 
@@ -126,7 +129,125 @@ void Kinect2Bridge::stop()
     nh.shutdown();
 }
 
+Kinect2Bridge::Image Kinect2Bridge::stringToImageType(const std::string& imageType)
+{
+    if (imageType.compare("IR_SD") == 0)
+        return IR_SD;
+    if (imageType.compare("IR_SD_RECT") == 0)
+        return IR_SD_RECT;
+    if (imageType.compare("DEPTH_SD") == 0)
+        return DEPTH_SD;
+    if (imageType.compare("DEPTH_SD_RECT") == 0)
+        return DEPTH_SD_RECT;
+    if (imageType.compare("DEPTH_HD") == 0)
+        return DEPTH_HD;
+    if (imageType.compare("DEPTH_QHD") == 0)
+        return DEPTH_QHD;
+    if (imageType.compare("COLOR_SD_RECT") == 0)
+        return COLOR_SD_RECT;
+    if (imageType.compare("COLOR_HD") == 0)
+        return COLOR_HD;
+    if (imageType.compare("COLOR_HD_RECT") == 0)
+        return COLOR_HD_RECT;
+    if (imageType.compare("COLOR_QHD") == 0)
+        return COLOR_QHD;
+    if (imageType.compare("COLOR_QHD_RECT") == 0)
+        return COLOR_QHD_RECT;
+    if (imageType.compare("MONO_HD") == 0)
+        return MONO_HD;
+    if (imageType.compare("MONO_HD_RECT") == 0)
+        return MONO_HD_RECT;
+    if (imageType.compare("MONO_QHD") == 0)
+        return MONO_QHD;
+    if (imageType.compare("MONO_QHD_RECT") == 0)
+        return MONO_QHD_RECT;
 
+    return COUNT;
+}
+
+bool Kinect2Bridge::retrieveImagePubOptions()
+{
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieving image publisher options from ROS parameter server.");
+    if (priv_nh.hasParam("/kinect2_bridge_image_publisher_options"))
+    {
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge_image_publisher_options parameter found.");
+        XmlRpc::XmlRpcValue img_pub_param_value;
+        if (priv_nh.getParam("/kinect2_bridge_image_publisher_options", img_pub_param_value))
+        {
+            ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge_image_publisher_options parameter retrieved.");
+            if (img_pub_param_value.getType() == XmlRpc::XmlRpcValue::TypeStruct)
+            {
+                ROS_INFO_STREAM_NAMED("kinect2_bridge", "Parameter type is XmlRpc::XmlRpcValue::TypeStruct as expected with " << img_pub_param_value.size() << " entries.");
+                imagePubOptionsRetrieved = true;
+                imagePublisherOptions.clear();
+
+                for (XmlRpc::XmlRpcValue::ValueStruct::iterator it = img_pub_param_value.begin(); it != img_pub_param_value.end(); it++)
+                {
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "  Struct member: " << it->first << " of type " << it->second.getType());
+                    if (it->second.getType() == XmlRpc::XmlRpcValue::TypeStruct)
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "  Struct entry of size: " << it->second.size());
+
+                        ImagePublisherOption img_pub_option;
+                        bool img_type_found = false;
+                        bool publish_found = false;
+                        bool publish_compressed_found = false;
+                        std::string img_type_string;
+                        bool img_type_definition_valid = false;
+
+                        for (XmlRpc::XmlRpcValue::ValueStruct::iterator it_img = it->second.begin(); it_img != it->second.end(); it_img++)
+                        {
+                            if (it_img->first == "image_type")
+                            {
+                                ROS_INFO_STREAM_NAMED("kinect2_bridge", "   image_type value found: " << it_img->second);
+                                img_pub_option.imageType = stringToImageType(it_img->second);
+                                img_type_string = it_img->second;
+
+                                if (img_pub_option.imageType != COUNT)
+                                    img_type_found = true;
+                            }
+
+                            if (it_img->first == "publish")
+                            {
+                                ROS_INFO_STREAM_NAMED("kinect2_bridge", "   publish value found: " << it_img->second);
+                                if (it_img->second.operator std::string & ().compare("true") == 0)
+                                    img_pub_option.publish = true;
+                                else
+                                    img_pub_option.publish = false;
+                                
+                                publish_found = true;
+                            }
+
+                            if (it_img->first == "publish_compressed")
+                            {
+                                ROS_INFO_STREAM_NAMED("kinect2_bridge", "   publish_compressed value found: " << it_img->second);
+                                if (it_img->second.operator std::string & ().compare("true") == 0)
+                                    img_pub_option.publishCompressed = true;
+                                else
+                                    img_pub_option.publishCompressed = false;
+
+                                publish_compressed_found = true;
+                            }
+                        }
+
+                        if (publish_found && publish_compressed_found && img_type_found)
+                            img_type_definition_valid = true;
+
+                        if (img_type_definition_valid)
+                        {
+                            img_pub_option.valid = true;
+                            ROS_INFO_STREAM_NAMED("kinect2_bridge", "Adding new image type definition for image format: " << img_type_string);
+                            imagePublisherOptions.push_back(img_pub_option);
+                        }
+                    }
+                }
+
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 bool Kinect2Bridge::initialize()
 {
@@ -174,6 +295,7 @@ bool Kinect2Bridge::initialize()
 #ifndef _WIN32
     worker_threads = std::max(1, worker_threads);
 #else
+    // TODO: Multithreading where applicable for postprocessing for Win32
     worker_threads = 1;
 #endif
     threads.resize(worker_threads);
@@ -200,6 +322,10 @@ bool Kinect2Bridge::initialize()
              << "             worker_threads: " FG_CYAN << worker_threads << NO_COLOR << std::endl
              );
 
+    if (retrieveImagePubOptions())
+    {
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieved image publishing settings from parameter server.");
+    }
 
     deltaT = fps_limit > 0 ? (1.0 / fps_limit) : 0.0;
 
@@ -312,38 +438,155 @@ void Kinect2Bridge::initCompression(const int32_t jpegQuality, const int32_t png
     }
 }
 
+const Kinect2Bridge::ImagePublisherOption& Kinect2Bridge::getImagePublisherOption(const Image imageType)
+{
+    for (size_t k = 0; k < imagePublisherOptions.size(); ++k)
+    {
+        if (imagePublisherOptions[k].imageType == imageType)
+            return imagePublisherOptions[k];
+    }
+
+    return emptyImagePublisherOption;
+}
+
 void Kinect2Bridge::initTopics(const int32_t queueSize, const std::string &base_name)
 {
-    std::vector<std::string> topics(COUNT);
-    topics[IR_SD] = K2_TOPIC_SD K2_TOPIC_IMAGE_IR;
-    topics[IR_SD_RECT] = K2_TOPIC_SD K2_TOPIC_IMAGE_IR K2_TOPIC_IMAGE_RECT;
+    imageTopics.resize(COUNT);
+    publishCompressedImages.resize(COUNT);
+    
+    const ImagePublisherOption& ir_sd_opt = getImagePublisherOption(IR_SD);
+    if (ir_sd_opt.valid && ir_sd_opt.publish)
+        imageTopics[IR_SD] = K2_TOPIC_SD K2_TOPIC_IMAGE_IR;
+    else
+        imageTopics[IR_SD] = "";
 
-    topics[DEPTH_SD] = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH;
-    topics[DEPTH_SD_RECT] = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
-    topics[DEPTH_HD] = K2_TOPIC_HD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
-    topics[DEPTH_QHD] = K2_TOPIC_QHD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
+    publishCompressedImages[IR_SD] = ir_sd_opt.publishCompressed;
 
-    topics[COLOR_SD_RECT] = K2_TOPIC_SD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
+    const ImagePublisherOption& ir_sd_rect_opt = getImagePublisherOption(IR_SD_RECT);
+    if (ir_sd_rect_opt.valid && ir_sd_rect_opt.publish)
+        imageTopics[IR_SD_RECT] = K2_TOPIC_SD K2_TOPIC_IMAGE_IR K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[IR_SD_RECT] = "";
 
-    topics[COLOR_HD] = K2_TOPIC_HD K2_TOPIC_IMAGE_COLOR;
-    topics[COLOR_HD_RECT] = K2_TOPIC_HD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
-    topics[COLOR_QHD] = K2_TOPIC_QHD K2_TOPIC_IMAGE_COLOR;
-    topics[COLOR_QHD_RECT] = K2_TOPIC_QHD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
+    publishCompressedImages[IR_SD_RECT] = ir_sd_rect_opt.publishCompressed;
 
-    topics[MONO_HD] = K2_TOPIC_HD K2_TOPIC_IMAGE_MONO;
-    topics[MONO_HD_RECT] = K2_TOPIC_HD K2_TOPIC_IMAGE_MONO K2_TOPIC_IMAGE_RECT;
-    topics[MONO_QHD] = K2_TOPIC_QHD K2_TOPIC_IMAGE_MONO;
-    topics[MONO_QHD_RECT] = K2_TOPIC_QHD K2_TOPIC_IMAGE_MONO K2_TOPIC_IMAGE_RECT;
+    const ImagePublisherOption& depth_sd_opt = getImagePublisherOption(DEPTH_SD);
+    if (depth_sd_opt.valid && depth_sd_opt.publish)
+        imageTopics[DEPTH_SD] = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH;
+    else
+        imageTopics[DEPTH_SD] = "";
 
-    imagePubs.resize(COUNT);
-    compressedPubs.resize(COUNT);
+    publishCompressedImages[DEPTH_SD] = depth_sd_opt.publishCompressed;
+
+    const ImagePublisherOption& depth_sd_rect_opt = getImagePublisherOption(DEPTH_SD_RECT);
+    if (depth_sd_rect_opt.valid && depth_sd_rect_opt.publish)
+        imageTopics[DEPTH_SD_RECT] = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[DEPTH_SD_RECT] = "";
+
+    publishCompressedImages[DEPTH_SD_RECT] = depth_sd_rect_opt.publishCompressed;
+
+    const ImagePublisherOption& depth_hd_opt = getImagePublisherOption(DEPTH_HD);
+    if (depth_hd_opt.valid && depth_hd_opt.publish)
+        imageTopics[DEPTH_HD] = K2_TOPIC_HD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[DEPTH_HD] = "";
+
+    publishCompressedImages[DEPTH_HD] = depth_hd_opt.publishCompressed;
+
+    const ImagePublisherOption& depth_qhd_opt = getImagePublisherOption(DEPTH_QHD);
+    if (depth_qhd_opt.valid && depth_qhd_opt.publish)
+        imageTopics[DEPTH_QHD] = K2_TOPIC_QHD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[DEPTH_QHD] = "";
+
+    publishCompressedImages[DEPTH_QHD] = depth_qhd_opt.publishCompressed;
+
+    const ImagePublisherOption& color_sd_rect_opt = getImagePublisherOption(COLOR_SD_RECT);
+    if (color_sd_rect_opt.valid && color_sd_rect_opt.publish)
+        imageTopics[COLOR_SD_RECT] = K2_TOPIC_SD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[COLOR_SD_RECT] = "";
+
+    publishCompressedImages[COLOR_SD_RECT] = color_sd_rect_opt.publishCompressed;
+
+    const ImagePublisherOption& color_hd_opt = getImagePublisherOption(COLOR_HD);
+    if (color_hd_opt.valid && color_hd_opt.publish)
+        imageTopics[COLOR_HD] = K2_TOPIC_HD K2_TOPIC_IMAGE_COLOR;
+    else
+        imageTopics[COLOR_HD] = "";
+
+    publishCompressedImages[COLOR_HD] = color_hd_opt.publishCompressed;
+
+    const ImagePublisherOption& color_hd_rect_opt = getImagePublisherOption(COLOR_HD_RECT);
+    if (color_hd_rect_opt.valid && color_hd_rect_opt.publish)
+        imageTopics[COLOR_HD_RECT] = K2_TOPIC_HD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[COLOR_HD_RECT] = "";
+
+    publishCompressedImages[COLOR_HD_RECT] = color_hd_rect_opt.publishCompressed;
+
+    const ImagePublisherOption& color_qhd_opt = getImagePublisherOption(COLOR_QHD);
+    if (color_qhd_opt.valid && color_qhd_opt.publish)
+        imageTopics[COLOR_QHD] = K2_TOPIC_QHD K2_TOPIC_IMAGE_COLOR;
+    else
+        imageTopics[COLOR_QHD] = "";
+
+    publishCompressedImages[COLOR_QHD] = color_qhd_opt.publishCompressed;
+
+    const ImagePublisherOption& color_qhd_rect_opt = getImagePublisherOption(COLOR_QHD_RECT);
+    if (color_qhd_rect_opt.valid && color_qhd_rect_opt.publish)
+        imageTopics[COLOR_QHD_RECT] = K2_TOPIC_QHD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[COLOR_QHD_RECT] = "";
+
+    publishCompressedImages[COLOR_QHD_RECT] = color_qhd_rect_opt.publishCompressed;
+
+    const ImagePublisherOption& mono_hd_opt = getImagePublisherOption(MONO_HD);
+    if (mono_hd_opt.valid && mono_hd_opt.publish)
+        imageTopics[MONO_HD] = K2_TOPIC_HD K2_TOPIC_IMAGE_MONO;
+    else
+        imageTopics[MONO_HD] = "";
+
+    publishCompressedImages[MONO_HD] = mono_hd_opt.publishCompressed;
+
+    const ImagePublisherOption& mono_hd_rect_opt = getImagePublisherOption(MONO_HD_RECT);
+    if (mono_hd_rect_opt.valid && mono_hd_rect_opt.publish)
+        imageTopics[MONO_HD_RECT] = K2_TOPIC_HD K2_TOPIC_IMAGE_MONO K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[MONO_HD_RECT] = "";
+
+    publishCompressedImages[MONO_HD_RECT] = mono_hd_rect_opt.publishCompressed;
+
+    const ImagePublisherOption& mono_qhd_opt = getImagePublisherOption(MONO_QHD);
+    if (mono_qhd_opt.valid && mono_qhd_opt.publish)
+        imageTopics[MONO_QHD] = K2_TOPIC_QHD K2_TOPIC_IMAGE_MONO;
+    else
+        imageTopics[MONO_QHD] = "";
+
+    publishCompressedImages[MONO_QHD] = mono_qhd_opt.publishCompressed;
+
+    const ImagePublisherOption& mono_qhd_rect_opt = getImagePublisherOption(MONO_QHD_RECT);
+    if (mono_qhd_rect_opt.valid && mono_qhd_rect_opt.publish)
+        imageTopics[MONO_QHD_RECT] = K2_TOPIC_QHD K2_TOPIC_IMAGE_MONO K2_TOPIC_IMAGE_RECT;
+    else
+        imageTopics[MONO_QHD_RECT] = "";
+
+    publishCompressedImages[MONO_QHD_RECT] = mono_qhd_rect_opt.publishCompressed;
+
+    //imagePubs.resize(COUNT);
+    //compressedPubs.resize(COUNT);
     ros::SubscriberStatusCallback cb = boost::bind(&Kinect2Bridge::callbackStatus, this);
 
     for(size_t i = 0; i < COUNT; ++i)
     {
-        imagePubs[i] = nh.advertise<sensor_msgs::Image>(base_name + topics[i], queueSize, cb, cb);
-        compressedPubs[i] = nh.advertise<sensor_msgs::CompressedImage>(base_name + topics[i] + K2_TOPIC_COMPRESSED, queueSize, cb, cb);
+        if (!imageTopics[i].empty())
+            imagePubs[(Image) i] = nh.advertise<sensor_msgs::Image>(base_name + imageTopics[i], queueSize, cb, cb);
+
+        if (publishCompressedImages[(Image) i])
+            compressedPubs[(Image) i] = nh.advertise<sensor_msgs::CompressedImage>(base_name + imageTopics[i] + K2_TOPIC_COMPRESSED, queueSize, cb, cb);
     }
+
     infoHDPub = nh.advertise<sensor_msgs::CameraInfo>(base_name + K2_TOPIC_HD + K2_TOPIC_INFO, queueSize, cb, cb);
     infoQHDPub = nh.advertise<sensor_msgs::CameraInfo>(base_name + K2_TOPIC_QHD + K2_TOPIC_INFO, queueSize, cb, cb);
     infoIRPub = nh.advertise<sensor_msgs::CameraInfo>(base_name + K2_TOPIC_SD + K2_TOPIC_INFO, queueSize, cb, cb);

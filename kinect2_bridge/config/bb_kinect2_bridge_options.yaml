@@ -1,0 +1,34 @@
+bb_equipment_transforms:
+  map:
+    frame_id: world
+    child_frame_id: map
+    translation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    rotation:
+      r: 0.0
+      p: 0.0
+      y: 0.0
+  scan:
+    frame_id: map
+    child_frame_id: scan
+    translation:
+      x: 0.25
+      y: 0.0 
+      z: 0.0
+    rotation:
+      r: 0.0
+      p: 0.0
+      y: 0.0
+  kinect2_origin:
+    frame_id: map
+    child_frame_id: kinect2_origin
+    translation:
+      x: 0.0
+      y: 0.0
+      z: 0.78
+    rotation:
+      r: 1.57
+      p: 0.0
+      y: 1.57
