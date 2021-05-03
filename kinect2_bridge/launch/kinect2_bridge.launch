@@ -26,6 +26,8 @@
   <arg name="respawn"           default="false"/>
   <arg name="use_nodelet"       default="false"/>
   <arg name="output"            default="screen"/>
+  
+  <rosparam command="load" file="$(find kinect2_bridge)/config/bb_kinect2_bridge_options.yaml" />
 
   <machine name="localhost" address="localhost" if="$(arg use_machine)"/>
 

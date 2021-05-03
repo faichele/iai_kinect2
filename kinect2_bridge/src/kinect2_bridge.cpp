@@ -117,14 +117,19 @@ void Kinect2Bridge::stop()
     }
 #endif
 
-    for(size_t i = 0; i < COUNT; ++i)
+    for(std::map<Image, ros::Publisher>::iterator it = imagePubs.begin(); it != imagePubs.end(); ++it)
     {
-        imagePubs[i].shutdown();
-        compressedPubs[i].shutdown();
-        infoHDPub.shutdown();
-        infoQHDPub.shutdown();
-        infoIRPub.shutdown();
+        it->second.shutdown();
     }
+
+    for (std::map<Image, ros::Publisher>::iterator it = compressedPubs.begin(); it != compressedPubs.end(); ++it)
+    {
+        it->second.shutdown();
+    }
+
+    infoHDPub.shutdown();
+    infoQHDPub.shutdown();
+    infoIRPub.shutdown();
 
     nh.shutdown();
 }
@@ -168,13 +173,13 @@ Kinect2Bridge::Image Kinect2Bridge::stringToImageType(const std::string& imageTy
 bool Kinect2Bridge::retrieveImagePubOptions()
 {
     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieving image publisher options from ROS parameter server.");
-    if (priv_nh.hasParam("/kinect2_bridge_image_publisher_options"))
+    if (priv_nh.hasParam("/kinect2_bridge/image_publisher_options"))
     {
         ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge_image_publisher_options parameter found.");
         XmlRpc::XmlRpcValue img_pub_param_value;
-        if (priv_nh.getParam("/kinect2_bridge_image_publisher_options", img_pub_param_value))
+        if (priv_nh.getParam("/kinect2_bridge/image_publisher_options", img_pub_param_value))
         {
-            ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge_image_publisher_options parameter retrieved.");
+            ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge/image_publisher_options parameter retrieved: " << img_pub_param_value);
             if (img_pub_param_value.getType() == XmlRpc::XmlRpcValue::TypeStruct)
             {
                 ROS_INFO_STREAM_NAMED("kinect2_bridge", "Parameter type is XmlRpc::XmlRpcValue::TypeStruct as expected with " << img_pub_param_value.size() << " entries.");
@@ -210,7 +215,7 @@ bool Kinect2Bridge::retrieveImagePubOptions()
                             if (it_img->first == "publish")
                             {
                                 ROS_INFO_STREAM_NAMED("kinect2_bridge", "   publish value found: " << it_img->second);
-                                if (it_img->second.operator std::string & ().compare("true") == 0)
+                                if (it_img->second.operator bool & () == true)
                                     img_pub_option.publish = true;
                                 else
                                     img_pub_option.publish = false;
@@ -221,7 +226,7 @@ bool Kinect2Bridge::retrieveImagePubOptions()
                             if (it_img->first == "publish_compressed")
                             {
                                 ROS_INFO_STREAM_NAMED("kinect2_bridge", "   publish_compressed value found: " << it_img->second);
-                                if (it_img->second.operator std::string & ().compare("true") == 0)
+                                if (it_img->second.operator bool & () == true)
                                     img_pub_option.publishCompressed = true;
                                 else
                                     img_pub_option.publishCompressed = false;
@@ -231,7 +236,13 @@ bool Kinect2Bridge::retrieveImagePubOptions()
                         }
 
                         if (publish_found && publish_compressed_found && img_type_found)
+                        {
                             img_type_definition_valid = true;
+                        }
+                        else
+                        {
+                            ROS_WARN_STREAM_NAMED("kinect2_bridge", "Invalid ImagePublisherOption encountered: " << it->first << "!");
+                        }
 
                         if (img_type_definition_valid)
                         {
@@ -246,6 +257,164 @@ bool Kinect2Bridge::retrieveImagePubOptions()
             }
         }
     }
+    return false;
+}
+
+bool Kinect2Bridge::retrieveColorAndIrParams()
+{
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieving color and IR parameter settings from ROS parameter server.");
+    if (priv_nh.hasParam("/kinect2_bridge/colorParams") && priv_nh.hasParam("/kinect2_bridge/irParams"))
+    {
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Both /kinect2_bridge/colorParams and /kinect2_bridge/irParams parameters found.");
+        XmlRpc::XmlRpcValue color_params_value;
+        XmlRpc::XmlRpcValue ir_params_value;
+        if (priv_nh.getParam("/kinect2_bridge/colorParams", color_params_value) && priv_nh.getParam("/kinect2_bridge/irParams", ir_params_value))
+        {
+            ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge/colorParams value retrieved: " << color_params_value);
+            if (color_params_value.getType() == XmlRpc::XmlRpcValue::TypeStruct)
+            {
+                ROS_INFO_STREAM_NAMED("kinect2_bridge", "Parameter type is XmlRpc::XmlRpcValue::TypeStruct as expected with " << color_params_value.size() << " entries.");
+                
+                bool color_cx_found = false;
+                double color_cx = 0.0f;
+                bool color_cy_found = false;
+                double color_cy = 0.0f;
+                bool color_fx_found = false;
+                double color_fx = 0.0f;
+                bool color_fy_found = false;
+                double color_fy = 0.0f;
+
+                for (XmlRpc::XmlRpcValue::ValueStruct::iterator it = color_params_value.begin(); it != color_params_value.end(); it++)
+                {
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "  Struct member: " << it->first << " of type " << it->second.getType());
+                    
+                    if (it->first == "fx")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   fx parameter for colorParams found: " << it->second);
+                        color_fx_found = true;
+                        color_fx = it->second.operator const double& ();
+                    }
+                    if (it->first == "fy")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   fy parameter for colorParams found: " << it->second);
+                        color_fy_found = true;
+                        color_fy = it->second.operator const double& ();
+                    }
+                    if (it->first == "cx")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   cx parameter for colorParams found: " << it->second);
+                        color_cx_found = true;
+                        color_cx = it->second.operator const double& ();
+                    }
+                    if (it->first == "cy")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   cy parameter for colorParams found: " << it->second);
+                        color_cy_found = true;
+                        color_cy = it->second.operator const double& ();
+                    }
+                }
+
+                if (color_cx_found && color_cy_found && color_fx_found && color_fy_found)
+                {
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Found all required color parameters to set for private implementation.");
+                    m_d->setColorParams(color_cx, color_cy, color_fx, color_fy);
+                }
+            }
+            
+            ROS_INFO_STREAM_NAMED("kinect2_bridge", "/kinect2_bridge/irParams value retrieved: " << ir_params_value);
+            if (ir_params_value.getType() == XmlRpc::XmlRpcValue::TypeStruct)
+            {
+                ROS_INFO_STREAM_NAMED("kinect2_bridge", "Parameter type is XmlRpc::XmlRpcValue::TypeStruct as expected with " << ir_params_value.size() << " entries.");
+
+                bool ir_cx_found = false;
+                double ir_cx = 0.0f;
+                bool ir_cy_found = false;
+                double ir_cy = 0.0f;
+                bool ir_fx_found = false;
+                double ir_fx = 0.0f;
+                bool ir_fy_found = false;
+                double ir_fy = 0.0f;
+                bool ir_k1_found = false;
+                double ir_k1 = 0.0f;
+                bool ir_k2_found = false;
+                double ir_k2 = 0.0f;
+                bool ir_k3_found = false;
+                double ir_k3 = 0.0f;
+                bool ir_p1_found = false;
+                double ir_p1 = 0.0f;
+                bool ir_p2_found = false;
+                double ir_p2 = 0.0f;
+
+                for (XmlRpc::XmlRpcValue::ValueStruct::iterator it = ir_params_value.begin(); it != ir_params_value.end(); it++)
+                {
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "  Struct member: " << it->first << " of type " << it->second.getType());
+                    if (it->first == "fx")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   fx parameter for irParams found: " << it->second);
+                        ir_fx_found = true;
+                        ir_fx = it->second.operator const double& ();
+                    }
+                    if (it->first == "fy")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   fy parameter for irParams found: " << it->second);
+                        ir_fy_found = true;
+                        ir_fy = it->second.operator const double& ();
+                    }
+                    if (it->first == "cx")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   cx parameter for irParams found: " << it->second);
+                        ir_cx_found = true;
+                        ir_cx = it->second.operator const double& ();
+                    }
+                    if (it->first == "cy")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   cy parameter for irParams found: " << it->second);
+                        ir_cy_found = true;
+                        ir_cy = it->second.operator const double& ();
+                    }
+                    if (it->first == "k1")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   k1 parameter for irParams found: " << it->second);
+                        ir_k1_found = true;
+                        ir_k1 = it->second.operator const double& ();
+                    }
+                    if (it->first == "k2")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   k2 parameter for irParams found: " << it->second);
+                        ir_k2_found = true;
+                        ir_k2 = it->second.operator const double& ();
+                    }
+                    if (it->first == "k3")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   k3 parameter for irParams found: " << it->second);
+                        ir_k3_found = true;
+                        ir_k3 = it->second.operator const double& ();
+                    }
+                    if (it->first == "p1")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   p1 parameter for irParams found: " << it->second);
+                        ir_p1_found = true;
+                        ir_p1 = it->second.operator const double& ();
+                    }
+                    if (it->first == "p2")
+                    {
+                        ROS_INFO_STREAM_NAMED("kinect2_bridge", "   p2 parameter for irParams found: " << it->second);
+                        ir_p2_found = true;
+                        ir_p2 = it->second.operator const double& ();
+                    }
+                }
+
+                if (ir_cx_found && ir_cy_found && ir_fx_found && ir_fy_found && ir_k1_found && ir_k2_found && ir_k3_found && ir_p1_found && ir_p2_found)
+                {
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Found all required IR parameters to set for private implementation.");
+                    m_d->setIRParams(ir_cx, ir_cy, ir_fx, ir_fy, ir_k1, ir_k2, ir_k3, ir_p1, ir_p2);
+                }
+            }
+            
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -324,8 +493,15 @@ bool Kinect2Bridge::initialize()
 
     if (retrieveImagePubOptions())
     {
-        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieved image publishing settings from parameter server.");
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieved image publishing settings from ROS parameter server.");
     }
+
+#ifdef _WIN32
+    if (retrieveColorAndIrParams())
+    {
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieved color and IR camera parameters from ROS parameter server.");
+    }
+#endif
 
     deltaT = fps_limit > 0 ? (1.0 / fps_limit) : 0.0;
 
@@ -883,34 +1059,35 @@ bool Kinect2Bridge::updateStatus(bool &isSubscribedColor, bool &isSubscribedDept
     isSubscribedDepth = false;
     isSubscribedColor = false;
 
-    for(size_t i = 0; i < COUNT; ++i)
+    for (size_t i = 0; i < COUNT; ++i)
     {
         Status s = UNSUBCRIBED;
-        if(imagePubs[i].getNumSubscribers() > 0)
+        if (imagePubs.find((Image) i) != imagePubs.end() && imagePubs[(Image) i].getNumSubscribers() > 0)
         {
             s = RAW;
         }
-        if(compressedPubs[i].getNumSubscribers() > 0)
+        if(compressedPubs.find((Image) i) != compressedPubs.end() && compressedPubs[(Image) i].getNumSubscribers() > 0)
         {
             s = s == RAW ? BOTH : COMPRESSED;
         }
 
-        if(i <= COLOR_SD_RECT && s != UNSUBCRIBED)
+        if (i <= COLOR_SD_RECT && s != UNSUBCRIBED)
         {
             isSubscribedDepth = true;
         }
-        if(i >= COLOR_SD_RECT && s != UNSUBCRIBED)
+        if (i >= COLOR_SD_RECT && s != UNSUBCRIBED)
         {
             isSubscribedColor = true;
         }
 
         status[i] = s;
     }
-    if(infoHDPub.getNumSubscribers() > 0 || infoQHDPub.getNumSubscribers() > 0)
+
+    if (infoHDPub.getNumSubscribers() > 0 || infoQHDPub.getNumSubscribers() > 0)
     {
         isSubscribedColor = true;
     }
-    if(infoIRPub.getNumSubscribers() > 0)
+    if (infoIRPub.getNumSubscribers() > 0)
     {
         isSubscribedDepth = true;
     }
@@ -957,6 +1134,9 @@ void Kinect2Bridge::main()
             {
                 std::vector<cv::Mat> color_images(COLOR_HD + 1);
                 color_images[COLOR_HD] = m_d->last_color_img;
+                
+                processColor(color_images, status);
+                
                 ROS_INFO_STREAM_NAMED("kinect2_bridge", "Calling publishImages() for most current color frame...");
                 publishImages(color_images, msg_header, status, 0, pubFrameColor, COLOR_HD, COLOR_HD + 1);
                 ROS_INFO_STREAM_NAMED("kinect2_bridge", "publishImages() for most current color frame done.");
@@ -968,6 +1148,8 @@ void Kinect2Bridge::main()
                 std::vector<cv::Mat> depth_ir_images(DEPTH_SD + 1);
                 depth_ir_images[IR_SD] = m_d->last_infrared_img;
                 depth_ir_images[DEPTH_SD] = m_d->last_depth_img;
+
+                processIrDepth(m_d->last_depth_img, depth_ir_images, this->status);
 
                 publishImages(depth_ir_images, msg_header, status, 0, pubFrameIrDepth, IR_SD, DEPTH_SD + 1);
             }
@@ -1389,20 +1571,20 @@ void Kinect2Bridge::publishImages(const std::vector<cv::Mat> &images, const std_
                     break;
                 case RAW:
                     if (imageMsgs[i])
-                        imagePubs[i].publish(imageMsgs[i]);
+                        imagePubs[(Image) i].publish(imageMsgs[i]);
                     break;
                 case COMPRESSED:
                     if (compressedMsgs[i])
-                        compressedPubs[i].publish(compressedMsgs[i]);
+                        compressedPubs[(Image) i].publish(compressedMsgs[i]);
                     break;
                 case BOTH:
                 {
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Publishing BOTH image messages for image " << i);
                     if (imageMsgs[i])
-                        imagePubs[i].publish(imageMsgs[i]);
+                        imagePubs[(Image) i].publish(imageMsgs[i]);
 
                     if (compressedMsgs[i])
-                        compressedPubs[i].publish(compressedMsgs[i]);
+                        compressedPubs[(Image) i].publish(compressedMsgs[i]);
 
                     break;
                 }

@@ -244,6 +244,8 @@ private:
     bool retrieveImagePubOptions();
     const ImagePublisherOption& getImagePublisherOption(const Image);
 
+    bool retrieveColorAndIrParams();
+
     static ImagePublisherOption emptyImagePublisherOption;
     bool imagePubOptionsRetrieved;
     std::vector<ImagePublisherOption> imagePublisherOptions;

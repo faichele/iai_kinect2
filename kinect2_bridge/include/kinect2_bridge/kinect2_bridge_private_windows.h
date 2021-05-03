@@ -34,6 +34,16 @@
 #include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 
+#include <libfreenect2/libfreenect2.hpp>
+#include <libfreenect2/frame_listener_impl.h>
+#include <libfreenect2/packet_pipeline.h>
+#include <libfreenect2/config.h>
+#include <libfreenect2/registration.h>
+
+#include <kinect2_bridge/kinect2_definitions.h>
+#include <kinect2_registration/kinect2_registration.h>
+#include <kinect2_registration/kinect2_console.h>
+
 // Safe release for interfaces
 template<class Interface>
 inline void SafeRelease(Interface*& pInterfaceToRelease)
@@ -160,6 +170,11 @@ public:
 
     void updatePointCloud(UINT16* depthBuffer, unsigned char *colorBuffer);
 
+    void updateDepthImageInColorResolution(cv::Mat& depth_image_hd, const UINT16* pDepthBuffer, int nDepthWidth, int nDepthHeight);
+
+    void setColorParams(const double color_cx, const double color_cy, const double color_fx, const double color_fy);
+    void setIRParams(const double ir_cx, const double ir_cy, const double ir_fx, const double ir_fy, const double ir_k1, const double ir_k2, const double ir_k3, const double ir_p1, const double ir_p2);
+
     cv::Mat cameraMatrixColor, distortionColor, cameraMatrixLowRes, cameraMatrixIr, distortionIr, cameraMatrixDepth, distortionDepth;
     cv::Mat rotation, translation;
 
@@ -242,6 +257,7 @@ public:
     RGBQUAD* m_pInfraredRGBX;
 
     cv::Mat last_depth_img;
+    cv::Mat last_depth_img_hd;
     cv::Mat last_infrared_img;
     cv::Mat last_color_img;
 
@@ -255,6 +271,7 @@ public:
     unsigned long m_pointCloudSeqNum;
 
     ros::Publisher m_pointCloudPub;
+    ros::Publisher m_depthImageInColorResolutionPub;
     ros::Publisher m_bodyFramesPub;
     ros::Publisher m_trackingStatesPub;
     ros::NodeHandle m_rosNode;
@@ -263,4 +280,17 @@ public:
     bool infrared_img_received;
     bool depth_img_received;
     bool body_frames_received;
+
+    libfreenect2::Registration* registration;
+    libfreenect2::Freenect2Device::ColorCameraParams colorParams;
+    libfreenect2::Freenect2Device::IrCameraParams irParams;
+
+    bool m_irParamsSet;
+    bool m_colorParamsSet;
+
+#if 0
+    libfreenect2::PacketPipeline* packetPipeline;
+    libfreenect2::Freenect2 freenect2;
+    libfreenect2::Freenect2Device* device;
+#endif
 };

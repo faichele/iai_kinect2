@@ -28,8 +28,9 @@ if (UNIX)
 	find_package(freenect2 REQUIRED HINTS "$ENV{HOME}/freenect2")
 elseif (WIN32)
 	find_package(Kinect2SDK REQUIRED)
-        find_package(Qt5Core REQUIRED)
-        find_package(Qt5WinExtras REQUIRED)
+    find_package(Qt5Core REQUIRED)
+    find_package(Qt5WinExtras REQUIRED)
+	# find_package(LibFreenect2 REQUIRED)
 endif()
 
 find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration bb_kinect2_msgs)
@@ -76,6 +77,7 @@ include_directories(include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${freenect2_INCLUDE_DIRS}
+  ${LibFreenect2_INCLUDE_DIRS}
   ${kinect2_registration_INCLUDE_DIRS}
 )
 
@@ -113,6 +115,7 @@ target_link_libraries(kinect2_bridge_nodelet
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   ${freenect2_LIBRARY}
+  ${LibFreenect2_LIBRARIES}
   ${kinect2_registration_LIBRARY}
   ${KinectSDK2_LIBRARIES}
   ${Qt5Core_LIBRARIES}
@@ -125,6 +128,7 @@ target_link_libraries(kinect2_bridge
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   ${freenect2_LIBRARY}
+  ${LibFreenect2_LIBRARIES}
   ${kinect2_registration_LIBRARY}
   ${KinectSDK2_LIBRARIES}
   ${Qt5Core_LIBRARIES}

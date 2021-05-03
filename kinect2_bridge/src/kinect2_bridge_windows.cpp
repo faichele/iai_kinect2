@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include <sensor_msgs/image_encodings.h>
+
 Kinect2BridgePrivate::Kinect2BridgePrivate():
     m_intrinsicsRead(false),
     m_useMultiSourceFrameReader(false),
@@ -28,9 +30,36 @@ Kinect2BridgePrivate::Kinect2BridgePrivate():
     color_img_received(false),
     infrared_img_received(false),
     depth_img_received(false),
-    body_frames_received(false)
+    body_frames_received(false),
+    m_irParamsSet(false),
+    m_colorParamsSet(false)
 {
 
+}
+
+void Kinect2BridgePrivate::setColorParams(const double color_cx, const double color_cy, const double color_fx, const double color_fy)
+{
+    colorParams.cx = color_cx;
+    colorParams.cy = color_cy;
+    colorParams.fx = color_fx;
+    colorParams.fy = color_fy;
+
+    m_colorParamsSet = true;
+}
+
+void Kinect2BridgePrivate::setIRParams(const double ir_cx, const double ir_cy, const double ir_fx, const double ir_fy, const double ir_k1, const double ir_k2, const double ir_k3, const double ir_p1, const double ir_p2)
+{
+    irParams.cx = ir_cx;
+    irParams.cy = ir_cy;
+    irParams.fx = ir_fx;
+    irParams.fy = ir_fy;
+    irParams.k1 = ir_k1;
+    irParams.k2 = ir_k2;
+    irParams.k3 = ir_k3;
+    irParams.p1 = ir_p1;
+    irParams.p2 = ir_p2;
+
+    m_irParamsSet = true;
 }
 
 std::string Kinect2BridgePrivate::GetErrorMessage(HRESULT hr)
@@ -65,6 +94,37 @@ std::string Kinect2BridgePrivate::GetErrorMessage(HRESULT hr)
 
 bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
 {
+#if 0
+    // First briefly try to open the Kinect2 using the libfreenect2 driver to retrieve the camera parameters
+    packetPipeline = new libfreenect2::CpuPacketPipeline();
+    device = freenect2.openDevice(sensor, packetPipeline);
+
+    if (device == 0)
+    {
+        ROS_ERROR_STREAM_NAMED("kinect2_bridge", "No Kinect2 device connected or failure opening the default one!");
+        delete packetPipeline;
+        return false;
+    }
+    else
+    {
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Kinect2 device opened successfully using libfreenect2.");
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Kinect2 device serial number   : " << device->getSerialNumber());
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Kinect2 device firmware version: " << device->getFirmwareVersion());
+
+        colorParams = device->getColorCameraParams();
+        irParams = device->getIrCameraParams();
+
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Kinect2 IR and color parameters read from freenect2 driver.");
+
+        if (!device->close())
+        {
+            delete packetPipeline;
+            ROS_ERROR_STREAM_NAMED("kinect2_bridge", "No Kinect2 device connected or failure opening the default one!");
+            return false;
+        }
+    }
+#endif
+
     HRESULT hr;
 
     // Handle default sensor only for now
@@ -109,7 +169,9 @@ bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
                 m_pointCloud->width = static_cast<uint32_t>(cDepthWidth);
                 m_pointCloud->height = static_cast<uint32_t>(cDepthHeight);
                 m_pointCloud->points.resize(m_pointCloud->height * m_pointCloud->width);
-                m_pointCloud->is_dense = false;
+                m_pointCloud->is_dense = true;
+
+                m_depthImageInColorResolutionPub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/hd/depth_image_in_color_res", 10);
             }
 
             if (m_useMultiSourceFrameReader)
@@ -222,6 +284,8 @@ bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
 
             m_intrinsicsRead = true;
 
+            registration = new libfreenect2::Registration(irParams, colorParams);
+
             return true;
         }
     }
@@ -232,6 +296,9 @@ bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
 
 bool Kinect2BridgePrivate::shutdownDevice()
 {
+    if (registration != nullptr)
+        delete registration;
+
     if (m_pKinectSensor)
     {
         BOOLEAN kinectIsOpen;
@@ -664,6 +731,10 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
                 {
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Depth frame processed.");
                     depthReceived = true;
+
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Calling updateDepthImageInColorResolution().");
+                    updateDepthImageInColorResolution(last_depth_img_hd, pBuffer, nWidth, nHeight);
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Called  updateDepthImageInColorResolution().");
                 }
                 else
                 {
@@ -824,6 +895,77 @@ bool Kinect2BridgePrivate::receiveColor(IMultiSourceFrame *&frame, IColorFrame *
     return colorReceived;
 }
 
+void Kinect2BridgePrivate::updateDepthImageInColorResolution(cv::Mat& depth_image_hd, const UINT16* pDepthBuffer, int nDepthWidth, int nDepthHeight)
+{
+    // Retrieve Mapped Coordinates
+    std::vector<DepthSpacePoint> depthSpacePoints(cColorWidth * cColorHeight);
+    m_pCoordinateMapper->MapColorFrameToDepthSpace(nDepthWidth * nDepthHeight, pDepthBuffer, depthSpacePoints.size(), &depthSpacePoints[0]);
+
+    // Mapped Depth Buffer
+    std::vector<UINT16> buffer(cColorWidth * cColorHeight);
+
+    // Mapping Depth Data to Color Resolution
+    for (int colorY = 0; colorY < cColorHeight; colorY++) 
+    {
+        for (int colorX = 0; colorX < cColorWidth; colorX++) 
+        {
+            const unsigned int colorIndex = colorY * cColorWidth + colorX;
+            const int depthX = static_cast<int>(depthSpacePoints[colorIndex].X + 0.5f);
+            const int depthY = static_cast<int>(depthSpacePoints[colorIndex].Y + 0.5f);
+            if ((0 <= depthX) && (depthX < cDepthWidth) && (0 <= depthY) && (depthY < cDepthHeight)) 
+            {
+                const unsigned int depthIndex = depthY * cDepthWidth + depthX;
+                buffer[colorIndex] = pDepthBuffer[depthIndex];
+            }
+        }
+    }
+
+    /*CV_16UC1*/
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Converting depth image to HD resolution as input for libfreenect2 depth registration.");
+    depth_image_hd = cv::Mat(cColorHeight, cColorWidth, CV_16UC1 /*CV_32FC1*/, &buffer[0]).clone();
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully converted depth image to HD resolution as input for libfreenect2 depth registration.");
+    
+    cv::Mat tmp;
+    libfreenect2::Frame depthFrame(cColorWidth, cColorHeight, 4, depth_image_hd.data);
+    libfreenect2::Frame undistorted(cColorWidth, cColorHeight, 4);
+    libfreenect2::Frame registered(cColorWidth, cColorHeight, 4);
+
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated libfreenect2 Frame objects.");
+    
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
+    registration->apply(&depth_image_hd, &depthFrame, &undistorted, &registered);
+    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
+    
+    /*cv::flip(cv::Mat(sizeIr, CV_8UC4, registered.data), tmp, 1);
+    if (color.format == libfreenect2::Frame::BGRX)
+    {
+        cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_BGRA2BGR);
+    }
+    else
+    {
+        cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_RGBA2BGR);
+    }
+
+    sensor_msgs::Image msgImage;
+
+    size_t step, size;
+    step = depth_image_hd.cols * depth_image_hd.elemSize();
+    size = depth_image_hd.rows * step;
+
+    msgImage.encoding = sensor_msgs::image_encodings::TYPE_16UC1;
+
+    msgImage.header.stamp = ros::Time::now();
+    msgImage.header.frame_id = "kinect2_rgb_optical_frame";
+    msgImage.height = depth_image_hd.rows;
+    msgImage.width = depth_image_hd.cols;
+    msgImage.is_bigendian = false;
+    msgImage.step = step;
+    msgImage.data.resize(size);
+    memcpy(msgImage.data.data(), depth_image_hd.data, size);
+
+    m_depthImageInColorResolutionPub.publish(msgImage);
+}
+
 void Kinect2BridgePrivate::updatePointCloud(UINT16 *depthBuffer, unsigned char* colorBuffer)
 {
     // Reset Point Cloud
@@ -874,6 +1016,10 @@ void Kinect2BridgePrivate::updatePointCloud(UINT16 *depthBuffer, unsigned char* 
         }
     }
 
+    m_pointCloud->width = cDepthWidth;
+    m_pointCloud->height = cDepthHeight;
+    m_pointCloud->is_dense = true;
+
     pcl::toROSMsg(*m_pointCloud.get(), *m_pointCloudMsg.get());
 
     m_pointCloudMsg->header.stamp = ros::Time::now();
@@ -884,7 +1030,6 @@ void Kinect2BridgePrivate::updatePointCloud(UINT16 *depthBuffer, unsigned char* 
 
     m_pointCloudPub.publish(m_pointCloudMsg);
 }
-
 
 bool Kinect2BridgePrivate::receiveFrames()
 {
@@ -1056,7 +1201,7 @@ bool Kinect2BridgePrivate::receiveFrames()
 
 void Kinect2BridgePrivate::processColorDepthFrame()
 {
-
+    
 }
 
 bool Kinect2BridgePrivate::ProcessDepth(cv::Mat& depth_map_image, const UINT16* pBuffer, int nWidth, int nHeight, USHORT nMinDepth, USHORT nMaxDepth)
