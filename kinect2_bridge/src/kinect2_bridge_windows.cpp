@@ -2,11 +2,16 @@
 #include "kinect2_registration/kinect2_console.h"
 
 #include <string>
+#include <chrono>
+#include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include <sensor_msgs/image_encodings.h>
 
-Kinect2BridgePrivate::Kinect2BridgePrivate():
+Kinect2BridgePrivate::Kinect2BridgePrivate(bool readImages):
     m_intrinsicsRead(false),
+    m_readImages(readImages),
+    m_saveFramesToDisk(false),
     m_useMultiSourceFrameReader(false),
     m_pKinectSensor(nullptr),
     m_pMultiSourceFrameReader(nullptr),
@@ -32,7 +37,9 @@ Kinect2BridgePrivate::Kinect2BridgePrivate():
     depth_img_received(false),
     body_frames_received(false),
     m_irParamsSet(false),
-    m_colorParamsSet(false)
+    m_colorParamsSet(false),
+    m_currentImageSetIndex(0),
+    registration(nullptr)
 {
 
 }
@@ -171,7 +178,11 @@ bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
                 m_pointCloud->points.resize(m_pointCloud->height * m_pointCloud->width);
                 m_pointCloud->is_dense = true;
 
-                m_depthImageInColorResolutionPub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/hd/depth_image_in_color_res", 10);
+                m_colorImagePub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/offline_image_sequence/color", 10);
+                m_depthImagePub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/offline_image_sequence/depth", 10);
+                m_irImagePub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/offline_image_sequence/ir", 10);
+                m_registeredDepthImagePub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/offline_image_sequence/registered_depth", 10);
+                m_colorImageInDepthResolutionPub = m_rosNode.advertise<sensor_msgs::Image>("/kinect2/sd/color", 10);
             }
 
             if (m_useMultiSourceFrameReader)
@@ -283,8 +294,6 @@ bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
             m_radialDistortionSixthOrder = cameraIntrinsics.RadialDistortionSixthOrder;
 
             m_intrinsicsRead = true;
-
-            registration = new libfreenect2::Registration(irParams, colorParams);
 
             return true;
         }
@@ -467,6 +476,11 @@ void Kinect2BridgePrivate::createCameraParameters(const std::string& sensor)
 
 bool Kinect2BridgePrivate::initRegistration(const std::string &method, const int32_t device, const double maxDepth)
 {
+    if (!registration)
+    {
+        std::cout << "Initializing depth registration component." << std::endl;
+        registration = new Freenect::FreenectRegistration(irParams, colorParams);
+    }
     return true;
 }
 
@@ -486,7 +500,7 @@ bool Kinect2BridgePrivate::startStreams(bool isSubscribedColor, bool isSubscribe
     return true;
 }
 
-bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFrame*& pInfraredFrame, IDepthFrame*& pDepthFrame)
+bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFrame*& pInfraredFrame, IDepthFrame*& pDepthFrame, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds)
 {
     bool irReceived = false, depthReceived = false;
     ROS_INFO_STREAM_NAMED("kinect2_bridge", "In receiveIrDepth()");
@@ -544,7 +558,7 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
 
             if (SUCCEEDED(hr))
             {
-                if (ProcessInfrared(last_infrared_img, pBuffer, nWidth, nHeight))
+                if (ProcessInfrared(last_infrared_img, pBuffer, nWidth, nHeight, timestamp, ts_milliseconds))
                 {
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "IR frame processed.");
                     irReceived = true;
@@ -613,7 +627,7 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
 
             if (SUCCEEDED(hr))
             {
-                if (ProcessDepth(last_depth_img, pBuffer, nWidth, nHeight, nDepthMinReliableDistance, nDepthMaxDistance))
+                if (ProcessDepth(last_depth_img, pBuffer, nWidth, nHeight, nDepthMinReliableDistance, nDepthMaxDistance, timestamp, ts_milliseconds))
                 {
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Depth frame processed.");
                     depthReceived = true;
@@ -672,7 +686,7 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
 
             if (SUCCEEDED(hr))
             {
-                if (ProcessInfrared(last_infrared_img, pBuffer, nWidth, nHeight))
+                if (ProcessInfrared(last_infrared_img, pBuffer, nWidth, nHeight, timestamp, ts_milliseconds))
                 {
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "IR frame processed.");
                     irReceived = true;
@@ -727,14 +741,76 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
 
             if (SUCCEEDED(hr))
             {
-                if (ProcessDepth(last_depth_img, pBuffer, nWidth, nHeight, nDepthMinReliableDistance, nDepthMaxDistance))
+                if (ProcessDepth(last_depth_img, pBuffer, nWidth, nHeight, nDepthMinReliableDistance, nDepthMaxDistance, timestamp, ts_milliseconds))
                 {
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Depth frame processed.");
                     depthReceived = true;
 
+                    // cv::Mat tmp;
+                    libfreenect2::Frame colorFrame(cColorWidth, cColorHeight, 4, last_color_img.data);
+                    libfreenect2::Frame depthFrame(cDepthWidth, cDepthHeight, 4, last_depth_img.data);
+                    libfreenect2::Frame undistorted(cDepthWidth, cDepthHeight, 4);
+                    libfreenect2::Frame registered(cDepthWidth, cDepthHeight, 4);
+
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated libfreenect2 Frame objects.");
+
+                    /*ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
+                    registration->apply(&colorFrame, &depthFrame, &undistorted, &registered);
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applied libfreenect2 depth registration.");
+
+                    cv::Size sizeIr(registered.width, registered.height);
+                    cv::Mat color_img_in_depth_res(sizeIr, CV_8UC4, registered.data);*/
+
+                    /*if (last_color_img.format == libfreenect2::Frame::BGRX)
+                    {
+                        cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_BGRA2BGR);
+                    }
+                    else
+                    {
+                        cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_RGBA2BGR);
+                    }
+
+                    sensor_msgs::Image msgDepthImage;
+
+                    size_t step, size;
+                    step = last_depth_img.cols * last_depth_img.elemSize();
+                    size = last_depth_img.rows * step;
+
+                    msgDepthImage.encoding = sensor_msgs::image_encodings::TYPE_16UC1;
+
+                    msgDepthImage.header.stamp = ros::Time::now();
+                    msgDepthImage.header.frame_id = "kinect2_rgb_optical_frame";
+                    msgDepthImage.height = last_depth_img.rows;
+                    msgDepthImage.width = last_depth_img.cols;
+                    msgDepthImage.is_bigendian = false;
+                    msgDepthImage.step = step;
+                    msgDepthImage.data.resize(size);
+                    memcpy(msgDepthImage.data.data(), last_depth_img.data, size);
+
+                    m_depthImagePub.publish(msgDepthImage);
+
+                    sensor_msgs::Image msgColorImageInDepthRes;
+
+                    size_t color_step, color_size;
+                    color_step = color_img_in_depth_res.cols * color_img_in_depth_res.elemSize();
+                    color_size = color_img_in_depth_res.rows * color_step;
+
+                    msgColorImageInDepthRes.encoding = sensor_msgs::image_encodings::TYPE_16UC1;
+
+                    msgColorImageInDepthRes.header.stamp = ros::Time::now();
+                    msgColorImageInDepthRes.header.frame_id = "kinect2_rgb_optical_frame";
+                    msgColorImageInDepthRes.height = color_img_in_depth_res.rows;
+                    msgColorImageInDepthRes.width = color_img_in_depth_res.cols;
+                    msgColorImageInDepthRes.is_bigendian = false;
+                    msgColorImageInDepthRes.step = color_step;
+                    msgDepthImage.data.resize(color_size);
+                    memcpy(msgDepthImage.data.data(), color_img_in_depth_res.data, color_size);
+
+                    m_colorImageInDepthResolutionPub.publish(msgColorImageInDepthRes);
+
                     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Calling updateDepthImageInColorResolution().");
                     updateDepthImageInColorResolution(last_depth_img_hd, pBuffer, nWidth, nHeight);
-                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Called  updateDepthImageInColorResolution().");
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Called  updateDepthImageInColorResolution().");*/
                 }
                 else
                 {
@@ -749,7 +825,7 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
     return false;
 }
 
-bool Kinect2BridgePrivate::receiveColor(IMultiSourceFrame *&frame, IColorFrame *&pColorFrame)
+bool Kinect2BridgePrivate::receiveColor(IMultiSourceFrame *&frame, IColorFrame *&pColorFrame, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds)
 {
     bool colorReceived = false;
 
@@ -799,7 +875,7 @@ bool Kinect2BridgePrivate::receiveColor(IMultiSourceFrame *&frame, IColorFrame *
 
                 if (SUCCEEDED(hr))
                 {
-                    if (ProcessColor(last_color_img, pColorFrame, m_pColorRGBX, nWidth, nHeight, imageFormat))
+                    if (ProcessColor(last_color_img, pColorFrame, m_pColorRGBX, nWidth, nHeight, imageFormat, timestamp, ts_milliseconds))
                     {
                         ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully converted color frame to cv::Mat (multi-frame read).");
                         colorReceived = true;
@@ -876,9 +952,9 @@ bool Kinect2BridgePrivate::receiveColor(IMultiSourceFrame *&frame, IColorFrame *
 
             if (SUCCEEDED(hr))
             {
-                if (ProcessColor(last_color_img, pColorFrame, m_pColorRGBX, nWidth, nHeight, imageFormat))
+                if (ProcessColor(last_color_img, pColorFrame, m_pColorRGBX, nWidth, nHeight, imageFormat, timestamp, ts_milliseconds))
                 {
-                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully converted color frame to cv::Mat (single frame read).");
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully converted color frame to cv::Mat (single frame read) -- dimensions: " << last_color_img.cols << "x" << last_color_img.rows);
                     colorReceived = true;
                 }
                 else
@@ -924,46 +1000,6 @@ void Kinect2BridgePrivate::updateDepthImageInColorResolution(cv::Mat& depth_imag
     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Converting depth image to HD resolution as input for libfreenect2 depth registration.");
     depth_image_hd = cv::Mat(cColorHeight, cColorWidth, CV_16UC1 /*CV_32FC1*/, &buffer[0]).clone();
     ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully converted depth image to HD resolution as input for libfreenect2 depth registration.");
-    
-    cv::Mat tmp;
-    libfreenect2::Frame depthFrame(cColorWidth, cColorHeight, 4, depth_image_hd.data);
-    libfreenect2::Frame undistorted(cColorWidth, cColorHeight, 4);
-    libfreenect2::Frame registered(cColorWidth, cColorHeight, 4);
-
-    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated libfreenect2 Frame objects.");
-    
-    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
-    registration->apply(&depth_image_hd, &depthFrame, &undistorted, &registered);
-    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
-    
-    /*cv::flip(cv::Mat(sizeIr, CV_8UC4, registered.data), tmp, 1);
-    if (color.format == libfreenect2::Frame::BGRX)
-    {
-        cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_BGRA2BGR);
-    }
-    else
-    {
-        cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_RGBA2BGR);
-    }
-
-    sensor_msgs::Image msgImage;
-
-    size_t step, size;
-    step = depth_image_hd.cols * depth_image_hd.elemSize();
-    size = depth_image_hd.rows * step;
-
-    msgImage.encoding = sensor_msgs::image_encodings::TYPE_16UC1;
-
-    msgImage.header.stamp = ros::Time::now();
-    msgImage.header.frame_id = "kinect2_rgb_optical_frame";
-    msgImage.height = depth_image_hd.rows;
-    msgImage.width = depth_image_hd.cols;
-    msgImage.is_bigendian = false;
-    msgImage.step = step;
-    msgImage.data.resize(size);
-    memcpy(msgImage.data.data(), depth_image_hd.data, size);
-
-    m_depthImageInColorResolutionPub.publish(msgImage);
 }
 
 void Kinect2BridgePrivate::updatePointCloud(UINT16 *depthBuffer, unsigned char* colorBuffer)
@@ -1047,6 +1083,9 @@ bool Kinect2BridgePrivate::receiveFrames()
     HRESULT hr_ir_frame_read = E_FAIL;
     HRESULT hr_color_frame_read = E_FAIL;
 
+    const std::chrono::time_point<std::chrono::system_clock> current_time = std::chrono::system_clock::now();
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(current_time.time_since_epoch()).count() % 1000;
+
     bool processMultiFrame = true;
     // Read all at once
     if (m_useMultiSourceFrameReader)
@@ -1104,6 +1143,7 @@ bool Kinect2BridgePrivate::receiveFrames()
     bool bodyReceived = false;
     bool infraredReceived = false;
     bool colorReceived = false;
+
     if (!m_useMultiSourceFrameReader)
     {
         ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully read next set of frames from Kinect 2 (using individual readers).");
@@ -1117,16 +1157,15 @@ bool Kinect2BridgePrivate::receiveFrames()
 
         if (SUCCEEDED(hr_ir_frame_read) && SUCCEEDED(hr_depth_frame_read))
         {
-            infraredReceived = receiveIrDepth(frame, infraredFrame, depthFrame);
+            infraredReceived = receiveIrDepth(frame, infraredFrame, depthFrame, current_time, now_ms);
             ROS_INFO_STREAM_NAMED("kinect2_bridge", "IR & depth processed: " << (int) infraredReceived);
             if (SUCCEEDED(hr_ir_frame_read))
                 SafeRelease(infraredFrame);
-
         }
 
         if (SUCCEEDED(hr_color_frame_read))
         {
-            colorReceived = receiveColor(frame, colorFrame);
+            colorReceived = receiveColor(frame, colorFrame, current_time, now_ms);
             ROS_INFO_STREAM_NAMED("kinect2_bridge", "Color processed: " << (int) colorReceived);
         }
 
@@ -1158,6 +1197,7 @@ bool Kinect2BridgePrivate::receiveFrames()
     }
     else
     {
+#if 0
         if (!processMultiFrame)
         {
             ROS_WARN_STREAM_NAMED("kinect2_bridge", "Skipping multi-frame processing, Kinect2 read cycle timed out!");
@@ -1168,8 +1208,8 @@ bool Kinect2BridgePrivate::receiveFrames()
             // ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully read next set of frames from Kinect 2 (using MultiSourceFrameReader).");
 
             ROS_INFO_STREAM_NAMED("kinect2_bridge", "Processing color frame.");
-            colorReceived = receiveColor(frame, colorFrame);
-#if 0
+            colorReceived = receiveColor(frame, colorFrame, current_time, now_ms);
+
             ROS_INFO_STREAM_NAMED("kinect2_bridge", "Processing IR & depth frames.");
             infraredReceived = receiveIrDepth(frame, infraredFrame, depthFrame);
             if (frame != nullptr)
@@ -1189,11 +1229,12 @@ bool Kinect2BridgePrivate::receiveFrames()
                     SafeRelease(bodyFrameRef);
                 }
             }
-#endif
+
             frame->Release();
             body_frames_received = bodyReceived;
             newFrames = colorReceived || infraredReceived || bodyReceived;
         }
+#endif
     }
 #endif
     return newFrames;
@@ -1204,7 +1245,16 @@ void Kinect2BridgePrivate::processColorDepthFrame()
     
 }
 
-bool Kinect2BridgePrivate::ProcessDepth(cv::Mat& depth_map_image, const UINT16* pBuffer, int nWidth, int nHeight, USHORT nMinDepth, USHORT nMaxDepth)
+std::string Kinect2BridgePrivate::serializeTimePoint(const std::chrono::time_point<std::chrono::system_clock>& time, const std::string& format, unsigned int ts_milliseconds)
+{
+    std::time_t tt = std::chrono::system_clock::to_time_t(time);
+    std::tm tm = *std::gmtime(&tt); //GMT (UTC)
+    std::stringstream ss;
+    ss << std::put_time(&tm, format.c_str()) << ts_milliseconds;
+    return ss.str();
+}
+
+bool Kinect2BridgePrivate::ProcessDepth(cv::Mat& depth_map_image, const UINT16* pBuffer, int nWidth, int nHeight, USHORT nMinDepth, USHORT nMaxDepth, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds)
 {
     // Make sure we've received valid data
     if (m_pDepthRGBX && pBuffer && (nWidth == cDepthWidth) && (nHeight == cDepthHeight))
@@ -1212,6 +1262,7 @@ bool Kinect2BridgePrivate::ProcessDepth(cv::Mat& depth_map_image, const UINT16* 
         RGBQUAD* pRGBX = m_pDepthRGBX;
 
         static unsigned int depthImgCounter = 0;
+        static unsigned long long totalDepthImgCounter = 0;
 
         int lineNum = 0;
         int rowNum = 0;
@@ -1253,10 +1304,19 @@ bool Kinect2BridgePrivate::ProcessDepth(cv::Mat& depth_map_image, const UINT16* 
         }
 
         depthImgCounter++;
+        
 
-        if (depthImgCounter % 32 == 0)
+        if (m_saveFramesToDisk && depthImgCounter % 32 == 0)
         {
-            // cv::imwrite("T:\\temp\\depth_img.jpg", depth_map_image);
+            auto time_stamp = std::chrono::system_clock::to_time_t(timestamp);
+            std::stringstream depth_img_filename_str;
+            // const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count() % 1000;
+            
+            depth_img_filename_str << "E:\\Temp\\depth_img_" << serializeTimePoint(timestamp, "%Y%m%d_%H%M%S_", ts_milliseconds) << "_" << totalDepthImgCounter << ".jpg";
+
+            totalDepthImgCounter++;
+
+            cv::imwrite(depth_img_filename_str.str(), depth_map_image);
             depthImgCounter = 0;
         }
 
@@ -1266,13 +1326,14 @@ bool Kinect2BridgePrivate::ProcessDepth(cv::Mat& depth_map_image, const UINT16* 
     return false;
 }
 
-bool Kinect2BridgePrivate::ProcessInfrared(cv::Mat& infrared_img, const UINT16* pBuffer, int nWidth, int nHeight)
+bool Kinect2BridgePrivate::ProcessInfrared(cv::Mat& infrared_img, const UINT16* pBuffer, int nWidth, int nHeight, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds)
 {
     if (m_pInfraredRGBX && pBuffer && (nWidth == cInfraredWidth) && (nHeight == cInfraredHeight))
     {
         RGBQUAD* pDest = m_pInfraredRGBX;
 
         static unsigned int infraredImgCounter = 0;
+        static unsigned long long totalInfraredImgCounter = 0;
 
         unsigned int lineNum = 0;
         unsigned int rowNum = 0;
@@ -1321,9 +1382,17 @@ bool Kinect2BridgePrivate::ProcessInfrared(cv::Mat& infrared_img, const UINT16* 
 
         infraredImgCounter++;
 
-        if (infraredImgCounter % 32 == 0)
+        if (m_saveFramesToDisk && infraredImgCounter % 32 == 0)
         {
-            // cv::imwrite("T:\\temp\\infrared_img.jpg", infrared_img);
+            std::stringstream ir_img_filename_str;
+            auto time_stamp = std::chrono::system_clock::to_time_t(timestamp);
+            // const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count() % 1000;
+
+            ir_img_filename_str << "E:\\Temp\\ir_img_" << serializeTimePoint(timestamp, "%Y%m%d_%H%M%S_", ts_milliseconds) << "_" << totalInfraredImgCounter << ".jpg";
+
+            totalInfraredImgCounter++;
+
+            cv::imwrite(ir_img_filename_str.str(), infrared_img);
             infraredImgCounter = 0;
         }
         return true;
@@ -1437,7 +1506,7 @@ bool Kinect2BridgePrivate::AcquireBodyFrame(IBodyFrame *&pBodyFrame)
     return true;
 }
 
-bool Kinect2BridgePrivate::ProcessColor(cv::Mat& color_img, IColorFrame* pColorFrame, RGBQUAD* pBuffer, int nWidth, int nHeight, ColorImageFormat imageFormat)
+bool Kinect2BridgePrivate::ProcessColor(cv::Mat& color_img, IColorFrame* pColorFrame, RGBQUAD* pBuffer, int nWidth, int nHeight, ColorImageFormat imageFormat, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds)
 {
     HRESULT hr = E_FAIL;
     UINT nBufferSize = 0;
@@ -1455,6 +1524,7 @@ bool Kinect2BridgePrivate::ProcessColor(cv::Mat& color_img, IColorFrame* pColorF
     }
 
     static unsigned int colorImgCounter = 0;
+    static unsigned long long totalColorImgCounter = 0;
     if (SUCCEEDED(hr))
     {
         ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully read a new color frame.");
@@ -1465,9 +1535,17 @@ bool Kinect2BridgePrivate::ProcessColor(cv::Mat& color_img, IColorFrame* pColorF
 
         colorImgCounter++;
 
-        if (colorImgCounter % 32 == 0)
+        if (m_saveFramesToDisk && colorImgCounter % 32 == 0)
         {
-            // cv::imwrite("T:\\temp\\color_img.jpg", color_img);
+            std::stringstream color_img_filename_str;
+            auto time_stamp = std::chrono::system_clock::to_time_t(timestamp);
+            // const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count() % 1000;
+            
+            color_img_filename_str << "E:\\Temp\\color_img_" << serializeTimePoint(timestamp, "%Y%m%d_%H%M%S_", ts_milliseconds) << "_" << totalColorImgCounter << ".jpg";
+
+            totalColorImgCounter++;
+
+            cv::imwrite(color_img_filename_str.str(), color_img);
             colorImgCounter = 0;
         }
 
@@ -1499,7 +1577,7 @@ cv::Mat Kinect2BridgePrivate::QImageToCvMat(const QImage& inImage, bool inCloneI
     case QImage::Format_ARGB32:
     case QImage::Format_ARGB32_Premultiplied:
     {
-        cv::Mat  mat(inImage.height(), inImage.width(),
+        cv::Mat mat(inImage.height(), inImage.width(),
             CV_8UC4,
             const_cast<uchar*>(inImage.bits()),
             static_cast<size_t>(inImage.bytesPerLine())
@@ -1644,4 +1722,284 @@ QImage Kinect2BridgePrivate::cvMatToQImage(const cv::Mat& inMat)
 QPixmap Kinect2BridgePrivate::cvMatToQPixmap(const cv::Mat& inMat)
 {
     return QPixmap::fromImage(cvMatToQImage(inMat));
+}
+
+bool Kinect2BridgePrivate::readImagesFromDirectory(const std::string& directory)
+{
+    boost::filesystem::path img_base_path(directory);
+    for (boost::filesystem::directory_entry& entry : boost::filesystem::directory_iterator(directory))
+    {
+        if (boost::filesystem::is_regular_file(entry.path()))
+        {
+            std::string file_ext = boost::algorithm::to_lower_copy(entry.path().extension().string());
+            if (file_ext.compare("jpg"))
+            {
+                std::cout << "JPG image: " << entry.path() << std::endl;
+                boost::filesystem::path img_path = img_base_path;
+                img_path.append(entry.path().filename().string());
+                if (boost::algorithm::starts_with(entry.path().filename().string(), "color_img_"))
+                {
+                    std::string color_img_name = entry.path().filename().string();
+                    boost::algorithm::replace_all(color_img_name, "color_img_", "");
+                    boost::algorithm::replace_all(color_img_name, ".jpg", "");
+
+                    std::vector<std::string> color_img_name_parts;
+                    boost::algorithm::split(color_img_name_parts, color_img_name, boost::is_any_of("_"));
+
+                    /*std::cout << "Color image file name parts: " << color_img_name_parts.size() << std::endl;
+
+                    for (size_t l = 0; l < color_img_name_parts.size(); l++)
+                        std::cout << " * " << color_img_name_parts[l] << std::endl;*/
+
+                    if (color_img_name_parts.size() == 4)
+                    {
+                        std::cout << "Color image index in input sequence: " << std::stoi(color_img_name_parts[3]) << std::endl;
+                        m_colorImagesOrdering[std::stoi(color_img_name_parts[3])] = img_path.string();
+                        cv::Mat color_img = cv::imread(img_path.string());
+                        m_colorImages[img_path.string()] = color_img;
+                        std::cout << "Found a color image: " << img_path.string() << ", size = " << color_img.cols << "x" << color_img.rows << ", type = " << cv_mat_type2str(color_img.type()) << std::endl;
+                    }
+                }
+                else if (boost::algorithm::starts_with(entry.path().filename().string(), "depth_img_"))
+                {
+                    std::string depth_img_name = entry.path().filename().string();
+                    boost::algorithm::replace_all(depth_img_name, "depth_img_", "");
+                    boost::algorithm::replace_all(depth_img_name, ".jpg", "");
+
+                    std::vector<std::string> depth_img_name_parts;
+                    boost::algorithm::split(depth_img_name_parts, depth_img_name, boost::is_any_of("_"));
+
+                    /*std::cout << "Depth image file name parts: " << depth_img_name_parts.size() << std::endl;
+
+                    for (size_t l = 0; l < depth_img_name_parts.size(); l++)
+                        std::cout << " * " << depth_img_name_parts[l] << std::endl;*/
+
+                    if (depth_img_name_parts.size() == 4)
+                    {
+                        std::cout << "Depth image index in input sequence: " << std::stoi(depth_img_name_parts[3]) << std::endl;
+                        m_depthImagesOrdering[std::stoi(depth_img_name_parts[3])] = img_path.string();
+                        cv::Mat depth_img = cv::imread(img_path.string());
+                        m_depthImages[img_path.string()] = depth_img;
+                        std::cout << "Found a depth image: " << img_path.string() << ", size = " << depth_img.cols << "x" << depth_img.rows << ", type = " << cv_mat_type2str(depth_img.type()) << std::endl;
+                    }
+                }
+                else if (boost::algorithm::starts_with(entry.path().filename().string(), "ir_img_"))
+                {
+                    std::string ir_img_name = entry.path().filename().string();
+                    boost::algorithm::replace_all(ir_img_name, "ir_img_", "");
+                    boost::algorithm::replace_all(ir_img_name, ".jpg", "");
+
+                    std::vector<std::string> ir_img_name_parts;
+                    boost::algorithm::split(ir_img_name_parts, ir_img_name, boost::is_any_of("_"));
+
+                    /*std::cout << "IR image file name parts: " << ir_img_name_parts.size() << std::endl;
+
+                    for (size_t l = 0; l < ir_img_name_parts.size(); l++)
+                        std::cout << " * " << ir_img_name_parts[l] << std::endl;*/
+
+                    if (ir_img_name_parts.size() == 4)
+                    {
+                        std::cout << "IR image index in input sequence: " << std::stoi(ir_img_name_parts[3]) << std::endl;
+                        m_irImagesOrdering[std::stoi(ir_img_name_parts[3])] = img_path.string();
+                        cv::Mat ir_img = cv::imread(img_path.string());
+                        m_irImages[img_path.string()] = ir_img;
+                        std::cout << "Found an infrared image: " << img_path.string() << ", size = " << ir_img.cols << "x" << ir_img.rows << ", type = " << cv_mat_type2str(ir_img.type()) << std::endl;
+                    }
+                }
+            }
+            else
+            {
+                std::cout << "Other file: " << entry.path() << std::endl;
+            }
+        }
+    }
+
+    std::cout << "Color images read: " << m_colorImages.size() << std::endl;
+    for (std::map<int, std::string>::const_iterator it = m_colorImagesOrdering.begin(); it != m_colorImagesOrdering.end(); it++)
+    {
+        std::cout << " - Color image " << it->first << ": " << it->second << std::endl;
+    }
+    std::cout << "Depth images read: " << m_depthImages.size() << std::endl;
+    for (std::map<int, std::string>::const_iterator it = m_depthImagesOrdering.begin(); it != m_depthImagesOrdering.end(); it++)
+    {
+        std::cout << " - Depth image " << it->first << ": " << it->second << std::endl;
+    }
+    std::cout << "IR    images read: " << m_irImages.size() << std::endl;
+    for (std::map<int, std::string>::const_iterator it = m_irImagesOrdering.begin(); it != m_irImagesOrdering.end(); it++)
+    {
+        std::cout << " - IR image " << it->first << ": " << it->second << std::endl;
+    }
+
+    return true;
+}
+
+void Kinect2BridgePrivate::publishNextImageSet()
+{
+    std::cout << "Publishing next image set: " << m_currentImageSetIndex << std::endl;
+
+    if (m_colorImagesOrdering.find(m_currentImageSetIndex) != m_colorImagesOrdering.end() &&
+        m_depthImagesOrdering.find(m_currentImageSetIndex) != m_depthImagesOrdering.end() &&
+        m_irImagesOrdering.find(m_currentImageSetIndex) != m_irImagesOrdering.end())
+    {
+        std::cout << "Found color, depth and IR images for image set index " << m_currentImageSetIndex << std::endl;
+
+        cv::Mat current_color_img = m_colorImages[m_colorImagesOrdering[m_currentImageSetIndex]];
+        cv::Mat current_depth_img = this->m_depthImages[m_depthImagesOrdering[m_currentImageSetIndex]];
+        cv::Mat current_ir_img = m_irImages[m_irImagesOrdering[m_currentImageSetIndex]];
+
+        // cv::Mat tmp;
+
+        std::cout << "Current color image type: " << cv_mat_type2str(current_color_img.type()) << std::endl;
+        std::cout << "Current depth image type: " << cv_mat_type2str(current_depth_img.type()) << std::endl;
+
+        cv::Mat converted_color_img;
+        //current_color_img.convertTo(converted_color_img, CV_32FC3, 1 / 255.0);
+        cv::cvtColor(current_color_img, converted_color_img, cv::COLOR_BGR2BGRA);
+
+        cv::Mat converted_depth_img;
+        current_depth_img.convertTo(converted_depth_img, CV_32FC1, 1.0 / 255.0);
+        // current_color_img.convertTo(converted_color_img, CV_32FC3, 1 / 255.0);
+        // cv::cvtColor(current_depth_img, converted_depth_img, cv::COLOR_BGR2BGRA);
+
+        libfreenect2::Frame colorFrame(cColorWidth, cColorHeight, 4, converted_color_img.data);
+        libfreenect2::Frame depthFrame(cDepthWidth, cDepthHeight, 4, converted_depth_img.data);
+        //libfreenect2::Frame undistorted(cDepthWidth, cDepthHeight, 4);
+        //libfreenect2::Frame registered(cDepthWidth, cDepthHeight, 4);
+        libfreenect2::Frame undistorted(512, 424, 4), registered(512, 424, 4), depth_remap(1920, 1082, 4);
+
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated libfreenect2 Frame objects.");
+
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
+        registration->apply(&colorFrame, &depthFrame, &undistorted, &registered, /*true*/ false, &depth_remap);
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applied libfreenect2 depth registration.");
+
+        const uint32_t* p = reinterpret_cast<const uint32_t*>(registered.data);
+        std::cerr << "Image dump: " << std::endl;
+        for (int k = 0; k < registered.width; k++)
+        {
+            for (int l = 0; l < /*registered.height*/ 5; l++)
+            {
+                std::cerr << p[registered.height * l + k] << ",";
+            }
+        }
+        std::cerr << std::endl;
+
+        cv::Size sizeIr(registered.width, registered.height);
+        cv::Mat registered_depth_img(sizeIr, CV_8UC4, registered.data);
+        std::string ficken = this->cv_mat_type2str(registered_depth_img.type());
+        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Type of depth-registered image: " << ficken);
+
+        /*if (last_color_img.format == libfreenect2::Frame::BGRX)
+        {
+            cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_BGRA2BGR);
+        }
+        else
+        {
+            cv::cvtColor(tmp, images[COLOR_SD_RECT], CV_RGBA2BGR);
+        }*/
+
+        // Color image message
+        sensor_msgs::Image msgColorImage;
+
+        size_t step, size;
+        step = current_color_img.cols * current_color_img.elemSize();
+        size = current_color_img.rows * step;
+
+        msgColorImage.encoding = sensor_msgs::image_encodings::TYPE_8UC3;
+
+        msgColorImage.header.stamp = ros::Time::now();
+        msgColorImage.header.frame_id = "kinect2_rgb_optical_frame";
+        msgColorImage.height = current_color_img.rows;
+        msgColorImage.width = current_color_img.cols;
+        msgColorImage.is_bigendian = false;
+        msgColorImage.step = step;
+        msgColorImage.data.resize(size);
+        memcpy(msgColorImage.data.data(), current_color_img.data, size);
+
+        m_colorImagePub.publish(msgColorImage);
+
+        // Depth image message
+        sensor_msgs::Image msgDepthImage;
+
+        step = current_depth_img.cols * current_depth_img.elemSize();
+        size = current_depth_img.rows * step;
+
+        msgDepthImage.encoding = sensor_msgs::image_encodings::TYPE_8UC3;
+
+        msgDepthImage.header.stamp = ros::Time::now();
+        msgDepthImage.header.frame_id = "kinect2_rgb_optical_frame";
+        msgDepthImage.height = current_depth_img.rows;
+        msgDepthImage.width = current_depth_img.cols;
+        msgDepthImage.is_bigendian = false;
+        msgDepthImage.step = step;
+        msgDepthImage.data.resize(size);
+        memcpy(msgDepthImage.data.data(), current_depth_img.data, size);
+
+        m_depthImagePub.publish(msgDepthImage);
+
+        sensor_msgs::Image msgIrImage;
+
+        step = current_ir_img.cols * current_ir_img.elemSize();
+        size = current_ir_img.rows * step;
+
+        msgIrImage.encoding = sensor_msgs::image_encodings::TYPE_8UC3;
+
+        msgIrImage.header.stamp = ros::Time::now();
+        msgIrImage.header.frame_id = "kinect2_rgb_optical_frame";
+        msgIrImage.height = current_ir_img.rows;
+        msgIrImage.width = current_ir_img.cols;
+        msgIrImage.is_bigendian = false;
+        msgIrImage.step = step;
+        msgIrImage.data.resize(size);
+        memcpy(msgIrImage.data.data(), current_ir_img.data, size);
+
+        m_irImagePub.publish(msgIrImage);
+
+        // Registered depth image
+        sensor_msgs::Image msgRegisteredDepthImage;
+
+        step = registered_depth_img.cols * registered_depth_img.elemSize();
+        size = registered_depth_img.rows * step;
+
+        msgRegisteredDepthImage.encoding = sensor_msgs::image_encodings::TYPE_8UC4;
+
+        msgRegisteredDepthImage.header.stamp = ros::Time::now();
+        msgRegisteredDepthImage.header.frame_id = "kinect2_rgb_optical_frame";
+        msgRegisteredDepthImage.height = registered_depth_img.rows;
+        msgRegisteredDepthImage.width = registered_depth_img.cols;
+        msgRegisteredDepthImage.is_bigendian = false;
+        msgRegisteredDepthImage.step = step;
+        msgRegisteredDepthImage.data.resize(size);
+        memcpy(msgRegisteredDepthImage.data.data(), registered_depth_img.data, size);
+    
+        m_registeredDepthImagePub.publish(msgRegisteredDepthImage);
+    }
+
+    m_currentImageSetIndex++;
+    if (m_currentImageSetIndex > m_colorImages.size())
+        m_currentImageSetIndex = 0;
+}
+
+std::string Kinect2BridgePrivate::cv_mat_type2str(int type)
+{
+    std::string r;
+
+    uchar depth = type & CV_MAT_DEPTH_MASK;
+    uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+    switch (depth) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+    }
+
+    r += "C";
+    r += (chans + '0');
+
+    return r;
 }

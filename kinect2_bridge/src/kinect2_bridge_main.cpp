@@ -73,6 +73,7 @@ int main(int argc, char **argv)
 
     ros::init(argc, argv, "kinect2_bridge", ros::init_options::AnonymousName);
 
+    bool readImages = false;
     for(int argI = 1; argI < argc; ++argI)
     {
         std::string arg(argv[argI]);
@@ -82,6 +83,10 @@ int main(int argc, char **argv)
             help(argv[0]);
             ros::shutdown();
             return 0;
+        }
+        else if (arg == "--images" || arg == "-i")
+        {
+            readImages = true;
         }
         else
         {
@@ -96,32 +101,16 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    Kinect2Bridge kinect2;
+    Kinect2Bridge kinect2(readImages);
     if (kinect2.start())
     {
 #ifdef _WIN32
-        //if (lockIrDepth.try_lock() && lockColor.try_lock())
         ros::Rate mainRate(5.0);
         while (ros::ok())
         {
-            // OUT_INFO("Successfully locked IR/depth and color locks.");
-            /*if (kinect2.receiveFrames())
-            {
-                OUT_INFO("Successfully retrieved next frame set from Kinect2 sensor.");
-            }
-            else
-            {
-                OUT_ERROR("Failed to retrieve next frame set from Kinect2 sensor!");
-            }*/
-
             mainRate.sleep();
             ::ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration(0.01));
         }
-
-        //else
-        //{
-            // OUT_ERROR("Failed to lock IR/depth and color locks!");
-        //}
 #else
         ros::spin();
 #endif

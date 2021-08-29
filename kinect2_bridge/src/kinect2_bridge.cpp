@@ -25,16 +25,16 @@
 
 Kinect2Bridge::ImagePublisherOption Kinect2Bridge::emptyImagePublisherOption = Kinect2Bridge::ImagePublisherOption();
 
-Kinect2Bridge::Kinect2Bridge(const ros::NodeHandle &nh, const ros::NodeHandle &priv_nh)
+Kinect2Bridge::Kinect2Bridge(bool readImages, const ros::NodeHandle &nh, const ros::NodeHandle &priv_nh)
     : sizeColor(1920, 1080), sizeIr(512, 424), sizeLowRes(sizeColor.width / 2, sizeColor.height / 2),
       // color(sizeColor.width, sizeColor.height, 4), nh(nh), priv_nh(priv_nh),
       frameColor(0), frameIrDepth(0), pubFrameColor(0), pubFrameIrDepth(0), lastColor(0, 0), lastDepth(0, 0), nextColor(false),
       nextIrDepth(false), depthShift(0), running(false), deviceActive(false), clientConnected(false),
-      imagePubOptionsRetrieved(false)
+      imagePubOptionsRetrieved(false), m_readImages(readImages)
 {
     status.resize(COUNT, UNSUBCRIBED);
 
-    m_d.reset(new Kinect2BridgePrivate());
+    m_d.reset(new Kinect2BridgePrivate(m_readImages));
 }
 
 Kinect2Bridge::~Kinect2Bridge()
@@ -86,7 +86,9 @@ void Kinect2Bridge::stop()
     OUT_INFO("Setting running flag to false in stop().");
     running = false;
 
+    OUT_INFO("Waiting for mainThread to join...");
     mainThread.join();
+    OUT_INFO("mainThread joined.");
 
 #ifndef _WIN32
     for (size_t i = 0; i < threads.size(); ++i)
@@ -414,6 +416,31 @@ bool Kinect2Bridge::retrieveColorAndIrParams()
             return true;
         }
     }
+    else
+    {
+        ROS_WARN_STREAM_NAMED("kinect2_bridge", "Setting default color and IR parameters matching one specific Kinect2 device. This is not what you should use, see to provide your own device's settings!");
+
+        double color_cx = 959.5;
+        double color_cy = 539.5;
+        double color_fx = 1081.37;
+        double color_fy = 1081.37;
+
+        m_d->setColorParams(color_cx, color_cy, color_fx, color_fy);
+
+        double ir_cx = 254.3;
+        double ir_cy = 203.045;
+        double ir_fx = 366.781;
+        double ir_fy = 366.781;
+        double ir_k1 = 0.0857434;
+        double ir_k2 = -0.270673;
+        double ir_k3 = 0.102812;
+        double ir_p1 = 0.0;
+        double ir_p2 = 0.0;
+        
+        m_d->setIRParams(ir_cx, ir_cy, ir_fx, ir_fy, ir_k1, ir_k2, ir_k3, ir_p1, ir_p2);
+
+        return true;
+    }
 
     return false;
 }
@@ -500,6 +527,7 @@ bool Kinect2Bridge::initialize()
     if (retrieveColorAndIrParams())
     {
         ROS_INFO_STREAM_NAMED("kinect2_bridge", "Retrieved color and IR camera parameters from ROS parameter server.");
+        m_d->initRegistration("", 0, std::numeric_limits<double>::infinity());
     }
 #endif
 
@@ -1105,6 +1133,17 @@ void Kinect2Bridge::main()
     nextColor = true;
     nextIrDepth = true;
 
+#ifdef _WIN32
+    if (m_readImages)
+    {
+        running = true;
+        if (m_d->readImagesFromDirectory("E:\\Temp"))
+        {
+            ROS_INFO_STREAM_NAMED("kinect2_bridge", "Read input images from directory for offline processing.");
+        }
+    }
+#endif
+
     ros::Rate queryRate(16.0);
     for (; running && ros::ok();)
     {
@@ -1119,83 +1158,91 @@ void Kinect2Bridge::main()
 #endif
 
 #ifdef _WIN32
-        if (!m_d->receiveFrames())
+        if (m_d->m_readImages)
         {
-            ROS_WARN_STREAM_NAMED("kinect2_bridge", "Failed to query new frame data in control thread!");
+            m_d->publishNextImageSet();
             queryRate.sleep();
         }
         else
         {
-            ROS_INFO_STREAM_NAMED("kinect2_bridge", "Iterating control thread. deviceActive = " << (int) deviceActive);
-
-            std_msgs::Header msg_header = createHeader(lastColor, lastDepth);
-
-            if (m_d->color_img_received)
+            if (!m_d->receiveFrames())
             {
-                std::vector<cv::Mat> color_images(COLOR_HD + 1);
-                color_images[COLOR_HD] = m_d->last_color_img;
-                
-                processColor(color_images, status);
-                
-                ROS_INFO_STREAM_NAMED("kinect2_bridge", "Calling publishImages() for most current color frame...");
-                publishImages(color_images, msg_header, status, 0, pubFrameColor, COLOR_HD, COLOR_HD + 1);
-                ROS_INFO_STREAM_NAMED("kinect2_bridge", "publishImages() for most current color frame done.");
-                m_d->color_img_received = false;
+                ROS_WARN_STREAM_NAMED("kinect2_bridge", "Failed to query new frame data in control thread!");
+                queryRate.sleep();
             }
-
-            if (m_d->depth_img_received)
+            else
             {
-                std::vector<cv::Mat> depth_ir_images(DEPTH_SD + 1);
-                depth_ir_images[IR_SD] = m_d->last_infrared_img;
-                depth_ir_images[DEPTH_SD] = m_d->last_depth_img;
+                ROS_INFO_STREAM_NAMED("kinect2_bridge", "Iterating control thread. deviceActive = " << (int)deviceActive);
 
-                processIrDepth(m_d->last_depth_img, depth_ir_images, this->status);
+                std_msgs::Header msg_header = createHeader(lastColor, lastDepth);
 
-                publishImages(depth_ir_images, msg_header, status, 0, pubFrameIrDepth, IR_SD, DEPTH_SD + 1);
-            }
-
-            if (m_d->body_frames_received)
-            {
-                bb_kinect2_msgs::TrackingStates tracking_states_msg;
-                tracking_states_msg.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
-                for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
-                    tracking_states_msg.tracking_states[k] = m_d->m_userTrackingStatus[k];
-
-                m_d->m_trackingStatesPub.publish(tracking_states_msg);
-
-                for (std::map<unsigned int, Kinect2SkeletonData>::const_iterator it = m_d->m_trackedUsers.begin(); it != m_d->m_trackedUsers.end(); it++)
+                if (m_d->color_img_received)
                 {
-                    bb_kinect2_msgs::Person person_msg;
-                    person_msg.tracking_id = it->second.trackingId;
-                    person_msg.tracking_index = it->second.trackingIndex;
+                    std::vector<cv::Mat> color_images(COLOR_HD + 1);
+                    color_images[COLOR_HD] = m_d->last_color_img;
 
-                    person_msg.tracking_states.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
-                    for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
-                        person_msg.tracking_states.tracking_states[k] = m_d->m_userTrackingStatus[k];
+                    processColor(color_images, status);
 
-                    person_msg.header.stamp = ros::Time::now();
-                    person_msg.header.frame_id = "kinect2_link";
-
-                    for (int k = 0; k < JointType_Count; k++)
-                    {
-                        geometry_msgs::Point point_k;
-                        point_k.x = it->second.jointPositions3D[k].x();
-                        point_k.y = it->second.jointPositions3D[k].y();
-                        point_k.z = it->second.jointPositions3D[k].z();
-                        person_msg.joints3D.push_back(point_k);
-
-                        geometry_msgs::Point point_k_2d;
-                        point_k_2d.x = it->second.jointPositions2D[k].x();
-                        point_k_2d.y = it->second.jointPositions2D[k].y();
-                        point_k_2d.z = 0.0;
-                        person_msg.joints2D.push_back(point_k_2d);
-                    }
-
-                    m_d->m_bodyFramesPub.publish(person_msg);
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Calling publishImages() for most current color frame...");
+                    publishImages(color_images, msg_header, status, 0, pubFrameColor, COLOR_HD, COLOR_HD + 1);
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "publishImages() for most current color frame done.");
+                    m_d->color_img_received = false;
                 }
-            }
 
-            queryRate.sleep();
+                if (m_d->depth_img_received)
+                {
+                    std::vector<cv::Mat> depth_ir_images(DEPTH_SD + 1);
+                    depth_ir_images[IR_SD] = m_d->last_infrared_img;
+                    depth_ir_images[DEPTH_SD] = m_d->last_depth_img;
+
+                    processIrDepth(m_d->last_depth_img, depth_ir_images, this->status);
+
+                    publishImages(depth_ir_images, msg_header, status, 0, pubFrameIrDepth, IR_SD, DEPTH_SD + 1);
+                }
+
+                if (m_d->body_frames_received)
+                {
+                    bb_kinect2_msgs::TrackingStates tracking_states_msg;
+                    tracking_states_msg.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
+                    for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
+                        tracking_states_msg.tracking_states[k] = m_d->m_userTrackingStatus[k];
+
+                    m_d->m_trackingStatesPub.publish(tracking_states_msg);
+
+                    for (std::map<unsigned int, Kinect2SkeletonData>::const_iterator it = m_d->m_trackedUsers.begin(); it != m_d->m_trackedUsers.end(); it++)
+                    {
+                        bb_kinect2_msgs::Person person_msg;
+                        person_msg.tracking_id = it->second.trackingId;
+                        person_msg.tracking_index = it->second.trackingIndex;
+
+                        person_msg.tracking_states.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
+                        for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
+                            person_msg.tracking_states.tracking_states[k] = m_d->m_userTrackingStatus[k];
+
+                        person_msg.header.stamp = ros::Time::now();
+                        person_msg.header.frame_id = "kinect2_link";
+
+                        for (int k = 0; k < JointType_Count; k++)
+                        {
+                            geometry_msgs::Point point_k;
+                            point_k.x = it->second.jointPositions3D[k].x();
+                            point_k.y = it->second.jointPositions3D[k].y();
+                            point_k.z = it->second.jointPositions3D[k].z();
+                            person_msg.joints3D.push_back(point_k);
+
+                            geometry_msgs::Point point_k_2d;
+                            point_k_2d.x = it->second.jointPositions2D[k].x();
+                            point_k_2d.y = it->second.jointPositions2D[k].y();
+                            point_k_2d.z = 0.0;
+                            person_msg.joints2D.push_back(point_k_2d);
+                        }
+
+                        m_d->m_bodyFramesPub.publish(person_msg);
+                    }
+                }
+
+                queryRate.sleep();
+            }
         }
 #endif
 
@@ -1730,7 +1777,7 @@ void Kinect2Bridge::publishStaticTF()
 
     for(; running && ros::ok();)
     {
-        ROS_INFO_STREAM_NAMED("kinect2_bridge", "Publishing static TFs.");
+        ROS_DEBUG_STREAM_NAMED("kinect2_bridge", "Publishing static TFs.");
         now = ros::Time::now();
         stColorOpt.stamp_ = now;
         stIrOpt.stamp_ = now;
@@ -1759,7 +1806,8 @@ Kinect2BridgeNodelet::~Kinect2BridgeNodelet()
 
 void Kinect2BridgeNodelet::onInit()
 {
-    pKinect2Bridge = new Kinect2Bridge(getNodeHandle(), getPrivateNodeHandle());
+    // Nodelet won't use image IO mode
+    pKinect2Bridge = new Kinect2Bridge(false, getNodeHandle(), getPrivateNodeHandle());
     if(!pKinect2Bridge->start())
     {
         delete pKinect2Bridge;

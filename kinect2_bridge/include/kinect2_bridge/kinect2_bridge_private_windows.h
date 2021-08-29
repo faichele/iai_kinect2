@@ -13,6 +13,7 @@
 
 #include <iostream>
 #include <string>
+#include <chrono>
 
 #include <QPixmap>
 #include <QtWinExtras/qwinfunctions.h>
@@ -38,7 +39,8 @@
 #include <libfreenect2/frame_listener_impl.h>
 #include <libfreenect2/packet_pipeline.h>
 #include <libfreenect2/config.h>
-#include <libfreenect2/registration.h>
+#include "freenect_registration.h"
+// #include <libfreenect2/registration.h>
 
 #include <kinect2_bridge/kinect2_definitions.h>
 #include <kinect2_registration/kinect2_registration.h>
@@ -117,10 +119,15 @@ class Kinect2SkeletonData
 class Kinect2BridgePrivate
 {
 public:
-    Kinect2BridgePrivate();
+    Kinect2BridgePrivate(bool readImages);
 
-    bool receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFrame*& pInfraredFrame, IDepthFrame*& pDepthFrame);
-    bool receiveColor(IMultiSourceFrame*& frame, IColorFrame*& pColorFrame);
+    bool readImagesFromDirectory(const std::string& directory = "E:\\Temp");
+    void publishNextImageSet();
+
+    std::string cv_mat_type2str(int type);
+
+    bool receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFrame*& pInfraredFrame, IDepthFrame*& pDepthFrame, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds);
+    bool receiveColor(IMultiSourceFrame*& frame, IColorFrame*& pColorFrame, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds);
     bool receiveFrames();
 
     void processColorDepthFrame();
@@ -146,9 +153,9 @@ public:
 
     bool startStreams(bool isSubscribedColor, bool isSubscribedDepth);
 
-    bool ProcessDepth(cv::Mat& depth_map_image, const UINT16* pBuffer, int nWidth, int nHeight, USHORT nMinDepth, USHORT nMaxDepth);
-    bool ProcessInfrared(cv::Mat &infrared_img, const UINT16* pBuffer, int nWidth, int nHeight);
-    bool ProcessColor(cv::Mat &color_img, IColorFrame *pColorFrame, RGBQUAD *pBuffer, int nWidth, int nHeight, ColorImageFormat imageFormat);
+    bool ProcessDepth(cv::Mat& depth_map_image, const UINT16* pBuffer, int nWidth, int nHeight, USHORT nMinDepth, USHORT nMaxDepth, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds);
+    bool ProcessInfrared(cv::Mat &infrared_img, const UINT16* pBuffer, int nWidth, int nHeight, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds);
+    bool ProcessColor(cv::Mat &color_img, IColorFrame *pColorFrame, RGBQUAD *pBuffer, int nWidth, int nHeight, ColorImageFormat imageFormat, const std::chrono::time_point<std::chrono::system_clock> timestamp, unsigned int ts_milliseconds);
 
     tf2::Vector3 BodyToScreen(const CameraSpacePoint& bodyPoint, int width, int height);
     bool AcquireBodyFrame(IBodyFrame*& pBodyFrame);
@@ -172,8 +179,12 @@ public:
 
     void updateDepthImageInColorResolution(cv::Mat& depth_image_hd, const UINT16* pDepthBuffer, int nDepthWidth, int nDepthHeight);
 
+    std::string serializeTimePoint(const std::chrono::time_point<std::chrono::system_clock>& time, const std::string& format, unsigned int ts_milliseconds);
+
     void setColorParams(const double color_cx, const double color_cy, const double color_fx, const double color_fy);
     void setIRParams(const double ir_cx, const double ir_cy, const double ir_fx, const double ir_fy, const double ir_k1, const double ir_k2, const double ir_k3, const double ir_p1, const double ir_p2);
+
+    bool m_saveFramesToDisk;
 
     cv::Mat cameraMatrixColor, distortionColor, cameraMatrixLowRes, cameraMatrixIr, distortionIr, cameraMatrixDepth, distortionDepth;
     cv::Mat rotation, translation;
@@ -241,6 +252,16 @@ public:
 
     bool m_useMultiSourceFrameReader;
 
+    bool m_readImages;
+    std::map<std::string, cv::Mat> m_colorImages;
+    std::map<int, std::string> m_colorImagesOrdering;
+    std::map<std::string, cv::Mat> m_depthImages;
+    std::map<int, std::string> m_depthImagesOrdering;
+    std::map<std::string, cv::Mat> m_irImages;
+    std::map<int, std::string> m_irImagesOrdering;
+
+    int m_currentImageSetIndex;
+
     // Body reader
     IBodyFrameReader* m_pBodyFrameReader;
 
@@ -260,6 +281,7 @@ public:
     cv::Mat last_depth_img_hd;
     cv::Mat last_infrared_img;
     cv::Mat last_color_img;
+    // cv::Mat last_color_img_sd;
 
     unsigned char* rgb_image;
 
@@ -271,7 +293,14 @@ public:
     unsigned long m_pointCloudSeqNum;
 
     ros::Publisher m_pointCloudPub;
-    ros::Publisher m_depthImageInColorResolutionPub;
+
+    ros::Publisher m_colorImagePub;
+    ros::Publisher m_depthImagePub;
+    ros::Publisher m_irImagePub;
+    ros::Publisher m_registeredDepthImagePub;
+
+    ros::Publisher m_colorImageInDepthResolutionPub;
+    
     ros::Publisher m_bodyFramesPub;
     ros::Publisher m_trackingStatesPub;
     ros::NodeHandle m_rosNode;
@@ -281,7 +310,8 @@ public:
     bool depth_img_received;
     bool body_frames_received;
 
-    libfreenect2::Registration* registration;
+    //libfreenect2::Registration* registration;
+    Freenect::FreenectRegistration* registration;
     libfreenect2::Freenect2Device::ColorCameraParams colorParams;
     libfreenect2::Freenect2Device::IrCameraParams irParams;
 

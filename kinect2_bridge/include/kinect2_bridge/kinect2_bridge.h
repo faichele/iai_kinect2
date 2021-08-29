@@ -70,7 +70,7 @@ class Kinect2BridgePrivate;
 class Kinect2Bridge
 {
 public:
-    Kinect2Bridge(const ros::NodeHandle &nh = ros::NodeHandle(), const ros::NodeHandle &priv_nh = ros::NodeHandle("~"));
+    Kinect2Bridge(bool readImages, const ros::NodeHandle &nh = ros::NodeHandle(), const ros::NodeHandle &priv_nh = ros::NodeHandle("~"));
     virtual ~Kinect2Bridge();
 
     bool start();
@@ -201,6 +201,8 @@ private:
       pthread_setname_np(name.c_str());
   #endif
     }
+
+    bool m_readImages;
 
     boost::shared_ptr<Kinect2BridgePrivate> m_d;
 

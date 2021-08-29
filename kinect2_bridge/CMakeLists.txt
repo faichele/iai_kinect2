@@ -105,7 +105,10 @@ set(kinect2_bridge_SOURCES src/kinect2_bridge.cpp
                            src/kinect2_bridge_main.cpp)
 
 if (WIN32)
-    list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_windows.cpp)
+	list(APPEND kinect2_bridge_HEADERS include/kinect2_bridge/freenect_registration.h)
+    list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_windows.cpp 
+									   src/freenect_registration.cpp
+									   src/freenect_cpu_depth_packet_processor.cpp)
 else()
     list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_linux.cpp)
 endif()
