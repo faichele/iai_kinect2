@@ -35,12 +35,11 @@
 #include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-#include <libfreenect2/libfreenect2.hpp>
-#include <libfreenect2/frame_listener_impl.h>
-#include <libfreenect2/packet_pipeline.h>
-#include <libfreenect2/config.h>
-#include "freenect_registration.h"
-// #include <libfreenect2/registration.h>
+#include <kinect2_bridge/freenect_libfreenect2.h>
+#include <kinect2_bridge/freenect_frame_listener_impl.h>
+#include <kinect2_bridge/freenect_packet_pipeline.h>
+#include <kinect2_bridge/freenect_config.h>
+#include "kinect2_bridge/freenect_registration.h"
 
 #include <kinect2_bridge/kinect2_definitions.h>
 #include <kinect2_registration/kinect2_registration.h>
@@ -312,8 +311,8 @@ public:
 
     //libfreenect2::Registration* registration;
     Freenect::FreenectRegistration* registration;
-    libfreenect2::Freenect2Device::ColorCameraParams colorParams;
-    libfreenect2::Freenect2Device::IrCameraParams irParams;
+    Freenect::Freenect2Device::ColorCameraParams colorParams;
+    Freenect::Freenect2Device::IrCameraParams irParams;
 
     bool m_irParamsSet;
     bool m_colorParamsSet;

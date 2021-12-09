@@ -17,7 +17,7 @@ FIND_PATH(LibFreenect2_INCLUDE_DIRS
     libfreenect2
 )
 
-SET(LibFreenect2_NAME freenect2)
+SET(LibFreenect2_NAME freenect2 freenect2d)
 
 FIND_LIBRARY(LibFreenect2_LIBRARIES
   NAMES ${LibFreenect2_NAME}

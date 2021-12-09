@@ -30,13 +30,13 @@
 #define FREENECT_REGISTRATION_H_
 
 #include <string>
-#include <libfreenect2/config.h>
-#include <libfreenect2/libfreenect2.hpp>
-#include <libfreenect2/frame_listener.hpp>
+#include "kinect2_bridge/freenect_config.h"
+#include "kinect2_bridge/freenect_libfreenect2.h"
+#include "kinect2_bridge/freenect_frame_listener.hpp"
 
 namespace Freenect
 {
-
+	class Frame;
 class FreenectRegistrationImpl;
 
 /** @defgroup registration Registration and Geometry
@@ -58,7 +58,7 @@ public:
    * @param depth_p Depth camera parameters. You can use the factory values, or use your own.
    * @param rgb_p Color camera parameters. Probably use the factory values for now.
    */
-  FreenectRegistration(libfreenect2::Freenect2Device::IrCameraParams depth_p, libfreenect2::Freenect2Device::ColorCameraParams rgb_p);
+  FreenectRegistration(Freenect::Freenect2Device::IrCameraParams depth_p, Freenect::Freenect2Device::ColorCameraParams rgb_p);
   ~FreenectRegistration();
 
   /** Undistort and register a single depth point to color camera.
@@ -79,13 +79,13 @@ public:
    * @param[out] bigdepth If not `NULL`, return mapping of depth onto colors (1920x1082 float). **1082** not 1080, with a blank top and bottom row.
    * @param[out] color_depth_map Index of mapped color pixel for each depth pixel (512x424).
    */
-  void apply(const libfreenect2::Frame* rgb, const libfreenect2::Frame* depth, libfreenect2::Frame* undistorted, libfreenect2::Frame* registered, const bool enable_filter = true, libfreenect2::Frame* bigdepth = 0, int* color_depth_map = 0) const;
+  void apply(const Freenect::Frame* rgb, const Freenect::Frame* depth, Freenect::Frame* undistorted, Freenect::Frame* registered, const bool enable_filter = true, Freenect::Frame* bigdepth = 0, int* color_depth_map = 0) const;
 
   /** Undistort depth
    * @param depth Depth image (512x424 float)
    * @param[out] undistorted Undistorted depth image
    */
-  void undistortDepth(const libfreenect2::Frame* depth, libfreenect2::Frame* undistorted) const;
+  void undistortDepth(const Freenect::Frame* depth, Freenect::Frame* undistorted) const;
 
   /** Construct a 3-D point with color in a point cloud.
    * @param undistorted Undistorted depth frame from apply().
@@ -102,7 +102,7 @@ public:
    *     uint8_t g = p[1];
    *     uint8_t r = p[2];
    */
-  void getPointXYZRGB (const libfreenect2::Frame* undistorted, const libfreenect2::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const;
+  void getPointXYZRGB (const Freenect::Frame* undistorted, const Freenect::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const;
 
   /** Construct a 3-D point in a point cloud.
    * @param undistorted Undistorted depth frame from apply().
@@ -112,7 +112,7 @@ public:
    * @param[out] y Y coordinate of the 3-D point (meter).
    * @param[out] z Z coordinate of the 3-D point (meter).
    */
-  void getPointXYZ (const libfreenect2::Frame* undistorted, int r, int c, float& x, float& y, float& z) const;
+  void getPointXYZ (const Freenect::Frame* undistorted, int r, int c, float& x, float& y, float& z) const;
 
 private:
   FreenectRegistrationImpl* impl_;

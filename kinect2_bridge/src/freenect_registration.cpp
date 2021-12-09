@@ -28,7 +28,9 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include "kinect2_bridge/freenect_libfreenect2.h"
 #include "kinect2_bridge/freenect_registration.h"
+#include "kinect2_bridge/freenect_frame_listener.hpp"
 #include <limits>
 #include <iostream>
 
@@ -47,19 +49,19 @@ static const float color_q = 0.002199;
 class FreenectRegistrationImpl
 {
 public:
-  FreenectRegistrationImpl(libfreenect2::Freenect2Device::IrCameraParams depth_p, libfreenect2::Freenect2Device::ColorCameraParams rgb_p);
+  FreenectRegistrationImpl(Freenect::Freenect2Device::IrCameraParams depth_p, Freenect::Freenect2Device::ColorCameraParams rgb_p);
 
   void apply(int dx, int dy, float dz, float& cx, float &cy) const;
-  void apply(const libfreenect2::Frame* rgb, const libfreenect2::Frame* depth, libfreenect2::Frame* undistorted, libfreenect2::Frame* registered, const bool enable_filter, libfreenect2::Frame* bigdepth, int* color_depth_map) const;
-  void undistortDepth(const libfreenect2::Frame *depth, libfreenect2::Frame *undistorted) const;
-  void getPointXYZRGB (const libfreenect2::Frame* undistorted, const libfreenect2::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const;
-  void getPointXYZ (const libfreenect2::Frame* undistorted, int r, int c, float& x, float& y, float& z) const;
+  void apply(const Freenect::Frame* rgb, const Freenect::Frame* depth, Freenect::Frame* undistorted, Freenect::Frame* registered, const bool enable_filter, Freenect::Frame* bigdepth, int* color_depth_map) const;
+  void undistortDepth(const Freenect::Frame *depth, Freenect::Frame *undistorted) const;
+  void getPointXYZRGB (const Freenect::Frame* undistorted, const Freenect::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const;
+  void getPointXYZ (const Freenect::Frame* undistorted, int r, int c, float& x, float& y, float& z) const;
   void distort(int mx, int my, float& dx, float& dy) const;
   void depth_to_color(float mx, float my, float& rx, float& ry) const;
 
 private:
-  libfreenect2::Freenect2Device::IrCameraParams depth;    ///< Depth camera parameters.
-  libfreenect2::Freenect2Device::ColorCameraParams color; ///< Color camera parameters.
+  Freenect::Freenect2Device::IrCameraParams depth;    ///< Depth camera parameters.
+  Freenect::Freenect2Device::ColorCameraParams color; ///< Color camera parameters.
 
   int distort_map[512 * 424];
   float depth_to_color_map_x[512 * 424];
@@ -121,12 +123,12 @@ void FreenectRegistrationImpl::apply( int dx, int dy, float dz, float& cx, float
   cx = rx * color.fx + color.cx;
 }
 
-void FreenectRegistration::apply(const libfreenect2::Frame *rgb, const libfreenect2::Frame *depth, libfreenect2::Frame *undistorted, libfreenect2::Frame *registered, const bool enable_filter, libfreenect2::Frame *bigdepth, int *color_depth_map) const
+void FreenectRegistration::apply(const Freenect::Frame *rgb, const Freenect::Frame *depth, Freenect::Frame *undistorted, Freenect::Frame *registered, const bool enable_filter, Freenect::Frame *bigdepth, int *color_depth_map) const
 {
   impl_->apply(rgb, depth, undistorted, registered, enable_filter, bigdepth, color_depth_map);
 }
 
-void FreenectRegistrationImpl::apply(const libfreenect2::Frame *rgb, const libfreenect2::Frame *depth, libfreenect2::Frame *undistorted, libfreenect2::Frame *registered, const bool enable_filter, libfreenect2::Frame *bigdepth, int *color_depth_map) const
+void FreenectRegistrationImpl::apply(const Freenect::Frame *rgb, const Freenect::Frame *depth, Freenect::Frame *undistorted, Freenect::Frame *registered, const bool enable_filter, Freenect::Frame *bigdepth, int *color_depth_map) const
 {
   // Check if all frames are valid and have the correct size
   if (!rgb || !depth || !undistorted || !registered ||
@@ -305,12 +307,12 @@ void FreenectRegistrationImpl::apply(const libfreenect2::Frame *rgb, const libfr
   if (!color_depth_map) delete[] depth_to_c_off;
 }
 
-void FreenectRegistration::undistortDepth(const libfreenect2::Frame *depth, libfreenect2::Frame *undistorted) const
+void FreenectRegistration::undistortDepth(const Freenect::Frame *depth, Freenect::Frame *undistorted) const
 {
   impl_->undistortDepth(depth, undistorted);
 }
 
-void FreenectRegistrationImpl::undistortDepth(const libfreenect2::Frame *depth, libfreenect2::Frame *undistorted) const
+void FreenectRegistrationImpl::undistortDepth(const Freenect::Frame *depth, Freenect::Frame *undistorted) const
 {
   // Check if all frames are valid and have the correct size
   if (!depth || !undistorted ||
@@ -346,12 +348,12 @@ void FreenectRegistrationImpl::undistortDepth(const libfreenect2::Frame *depth, 
   }
 }
 
-void FreenectRegistration::getPointXYZRGB (const libfreenect2::Frame* undistorted, const libfreenect2::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const
+void FreenectRegistration::getPointXYZRGB (const Freenect::Frame* undistorted, const Freenect::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const
 {
   impl_->getPointXYZRGB(undistorted, registered, r, c, x, y, z, rgb);
 }
 
-void FreenectRegistrationImpl::getPointXYZRGB (const libfreenect2::Frame* undistorted, const libfreenect2::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const
+void FreenectRegistrationImpl::getPointXYZRGB (const Freenect::Frame* undistorted, const Freenect::Frame* registered, int r, int c, float& x, float& y, float& z, float& rgb) const
 {
   getPointXYZ(undistorted, r, c, x, y, z);
 
@@ -366,12 +368,12 @@ void FreenectRegistrationImpl::getPointXYZRGB (const libfreenect2::Frame* undist
   }
 }
 
-void FreenectRegistration::getPointXYZ(const libfreenect2::Frame *undistorted, int r, int c, float &x, float &y, float &z) const
+void FreenectRegistration::getPointXYZ(const Freenect::Frame *undistorted, int r, int c, float &x, float &y, float &z) const
 {
   impl_->getPointXYZ(undistorted,r,c,x,y,z);
 }
 
-void FreenectRegistrationImpl::getPointXYZ (const libfreenect2::Frame *undistorted, int r, int c, float &x, float &y, float &z) const
+void FreenectRegistrationImpl::getPointXYZ (const Freenect::Frame *undistorted, int r, int c, float &x, float &y, float &z) const
 {
   const float bad_point = std::numeric_limits<float>::quiet_NaN();
   const float cx(depth.cx), cy(depth.cy);
@@ -391,7 +393,7 @@ void FreenectRegistrationImpl::getPointXYZ (const libfreenect2::Frame *undistort
   }
 }
 
-FreenectRegistration::FreenectRegistration(libfreenect2::Freenect2Device::IrCameraParams depth_p, libfreenect2::Freenect2Device::ColorCameraParams rgb_p):
+FreenectRegistration::FreenectRegistration(Freenect::Freenect2Device::IrCameraParams depth_p, Freenect::Freenect2Device::ColorCameraParams rgb_p):
   impl_(new FreenectRegistrationImpl(depth_p, rgb_p)) {}
 
 FreenectRegistration::~FreenectRegistration()
@@ -399,7 +401,7 @@ FreenectRegistration::~FreenectRegistration()
   delete impl_;
 }
 
-FreenectRegistrationImpl::FreenectRegistrationImpl(libfreenect2::Freenect2Device::IrCameraParams depth_p, libfreenect2::Freenect2Device::ColorCameraParams rgb_p):
+FreenectRegistrationImpl::FreenectRegistrationImpl(Freenect::Freenect2Device::IrCameraParams depth_p, Freenect::Freenect2Device::ColorCameraParams rgb_p):
   depth(depth_p), color(rgb_p), filter_width_half(2), filter_height_half(1), filter_tolerance(0.01f)
 {
   float mx, my;

@@ -31,7 +31,7 @@
 
 #include <cstddef>
 
-namespace libfreenect2
+namespace Freenect
 {
 
 class Allocator;

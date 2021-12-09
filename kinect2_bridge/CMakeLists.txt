@@ -30,15 +30,16 @@ elseif (WIN32)
 	find_package(Kinect2SDK REQUIRED)
     find_package(Qt5Core REQUIRED)
     find_package(Qt5WinExtras REQUIRED)
-	# find_package(LibFreenect2 REQUIRED)
+	find_package(LibFreenect2 REQUIRED)
 endif()
 
-find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration bb_kinect2_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration bb_persons_msgs)
 
 ## System dependencies are found with CMake's conventions
+find_package(LibUSB REQUIRED)
+find_package(TurboJPEG REQUIRED)
 find_package(OpenCV REQUIRED)
-
-find_package( PCL 1.8 REQUIRED )
+find_package(PCL 1.8 REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -105,10 +106,48 @@ set(kinect2_bridge_SOURCES src/kinect2_bridge.cpp
                            src/kinect2_bridge_main.cpp)
 
 if (WIN32)
-	list(APPEND kinect2_bridge_HEADERS include/kinect2_bridge/freenect_registration.h)
-    list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_windows.cpp 
+	list(APPEND kinect2_bridge_HEADERS include/kinect2_bridge/freenect_config.h
+									   include/kinect2_bridge/freenect_exports.h
+									   include/kinect2_bridge/freenect_allocator.h
+									   include/kinect2_bridge/freenect_threading.h
+									   include/kinect2_bridge/freenect_logger.h
+									   include/kinect2_bridge/freenect_logging.h
+									   include/kinect2_bridge/freenect_data_callback.h
+									   include/kinect2_bridge/freenect_usb_event_loop.h
+									   include/kinect2_bridge/freenect_usb_transfer_pool.h
+									   include/kinect2_bridge/freenect_libfreenect2.h
+									   include/kinect2_bridge/freenect_color_settings.h
+									   include/kinect2_bridge/freenect_led_settings.h
+									   include/kinect2_bridge/freenect_internal_response.h
+									   include/kinect2_bridge/freenect_packet_pipeline.h
+									   include/kinect2_bridge/freenect_registration.h
+									   include/kinect2_bridge/freenect_packet_processor.h
+									   include/kinect2_bridge/freenect_async_packet_processor.h
+									   include/kinect2_bridge/freenect_depth_packet_processor.h
+									   include/kinect2_bridge/freenect_rgb_packet_processor.h
+									   include/kinect2_bridge/freenect_frame_listener.hpp
+									   include/kinect2_bridge/freenect_frame_listener_impl.h
+									   include/kinect2_bridge/freenect_protocol_usb_control.h
+									   include/kinect2_bridge/freenect_protocol_command_transaction.h
+									   )
+    list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_windows.cpp
+									   src/freenect_allocator.cpp
+									   src/freenect_tinythread.cpp
+									   src/freenect_logging.cpp
+									   src/freenect_usb_transfer_pool.cpp
+									   src/freenect_depth_packet_processor.cpp
+									   src/freenect_frame_listener_impl.cpp
 									   src/freenect_registration.cpp
-									   src/freenect_cpu_depth_packet_processor.cpp)
+									   src/freenect_packet_pipeline.cpp
+									   src/freenect_cpu_depth_packet_processor.cpp
+									   src/freenect_rgb_packet_processor.cpp
+									   src/freenect_turbo_jpeg_rgb_packet_processor.cpp
+									   src/freenect_depth_packet_stream_parser.cpp
+									   src/freenect_rgb_packet_stream_parser.cpp
+									   src/freenect_protocol_usb_control.cpp
+									   src/freenect_usb_event_loop.cpp
+									   src/freenect_protocol_command_transaction.cpp
+									   src/freenect_libfreenect2.cpp)
 else()
     list(APPEND kinect2_bridge_SOURCES src/kinect2_bridge_linux.cpp)
 endif()
@@ -124,6 +163,8 @@ target_link_libraries(kinect2_bridge_nodelet
   ${Qt5Core_LIBRARIES}
   ${Qt5WinExtras_LIBRARIES}
   ${PCL_LIBRARIES}
+  ${LibUSB_LIBRARIES}
+  ${TurboJPEG_LIBRARIES}
 )
 
 add_executable(kinect2_bridge ${kinect2_bridge_HEADERS} ${kinect2_bridge_SOURCES})
@@ -136,6 +177,8 @@ target_link_libraries(kinect2_bridge
   ${KinectSDK2_LIBRARIES}
   ${Qt5Core_LIBRARIES}
   ${Qt5WinExtras_LIBRARIES}
+  ${LibUSB_LIBRARIES}
+  ${TurboJPEG_LIBRARIES}
 )
 
 #############

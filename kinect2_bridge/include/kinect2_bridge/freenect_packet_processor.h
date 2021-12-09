@@ -31,7 +31,7 @@
 
 #include "kinect2_bridge/freenect_allocator.h"
 
-namespace libfreenect2
+namespace Freenect
 {
 
 /**
@@ -108,5 +108,5 @@ PacketProcessor<PacketT> *noopProcessor()
   return &noop_processor_;
 }
 
-} /* namespace libfreenect2 */
+} /* namespace Freenect */
 #endif /* PACKET_PROCESSOR_H_ */

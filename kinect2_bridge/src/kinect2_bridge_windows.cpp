@@ -747,12 +747,12 @@ bool Kinect2BridgePrivate::receiveIrDepth(IMultiSourceFrame*& frame, IInfraredFr
                     depthReceived = true;
 
                     // cv::Mat tmp;
-                    libfreenect2::Frame colorFrame(cColorWidth, cColorHeight, 4, last_color_img.data);
-                    libfreenect2::Frame depthFrame(cDepthWidth, cDepthHeight, 4, last_depth_img.data);
-                    libfreenect2::Frame undistorted(cDepthWidth, cDepthHeight, 4);
-                    libfreenect2::Frame registered(cDepthWidth, cDepthHeight, 4);
+                    Freenect::Frame colorFrame(cColorWidth, cColorHeight, 4, last_color_img.data);
+                    Freenect::Frame depthFrame(cDepthWidth, cDepthHeight, 4, last_depth_img.data);
+                    Freenect::Frame undistorted(cDepthWidth, cDepthHeight, 4);
+                    Freenect::Frame registered(cDepthWidth, cDepthHeight, 4);
 
-                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated libfreenect2 Frame objects.");
+                    ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated Freenect Frame objects.");
 
                     /*ROS_INFO_STREAM_NAMED("kinect2_bridge", "Applying libfreenect2 depth registration...");
                     registration->apply(&colorFrame, &depthFrame, &undistorted, &registered);
@@ -1861,11 +1861,11 @@ void Kinect2BridgePrivate::publishNextImageSet()
         // current_color_img.convertTo(converted_color_img, CV_32FC3, 1 / 255.0);
         // cv::cvtColor(current_depth_img, converted_depth_img, cv::COLOR_BGR2BGRA);
 
-        libfreenect2::Frame colorFrame(cColorWidth, cColorHeight, 4, converted_color_img.data);
-        libfreenect2::Frame depthFrame(cDepthWidth, cDepthHeight, 4, converted_depth_img.data);
+        Freenect::Frame colorFrame(cColorWidth, cColorHeight, 4, converted_color_img.data);
+        Freenect::Frame depthFrame(cDepthWidth, cDepthHeight, 4, converted_depth_img.data);
         //libfreenect2::Frame undistorted(cDepthWidth, cDepthHeight, 4);
         //libfreenect2::Frame registered(cDepthWidth, cDepthHeight, 4);
-        libfreenect2::Frame undistorted(512, 424, 4), registered(512, 424, 4), depth_remap(1920, 1082, 4);
+        Freenect::Frame undistorted(512, 424, 4), registered(512, 424, 4), depth_remap(1920, 1082, 4);
 
         ROS_INFO_STREAM_NAMED("kinect2_bridge", "Successfully instantiated libfreenect2 Frame objects.");
 

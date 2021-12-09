@@ -32,12 +32,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <libfreenect2/config.h>
-#include <libfreenect2/libfreenect2.hpp>
-#include <libfreenect2/frame_listener.hpp>
+#include <kinect2_bridge/freenect_config.h>
+#include <kinect2_bridge/freenect_libfreenect2.h>
+#include <kinect2_bridge/freenect_frame_listener.hpp>
 #include <kinect2_bridge/freenect_packet_processor.h>
 
-namespace libfreenect2
+namespace Freenect
 {
 
 /** Data packet with depth information. */
@@ -52,9 +52,9 @@ struct DepthPacket
 };
 
 /** Class for processing depth information. */
-typedef PacketProcessor<DepthPacket> BaseDepthPacketProcessor;
+typedef Freenect::PacketProcessor<DepthPacket> BaseDepthPacketProcessor;
 
-class DepthPacketProcessor : public BaseDepthPacketProcessor
+class DepthPacketProcessor : public Freenect::BaseDepthPacketProcessor
 {
 public:
   typedef Freenect2Device::Config Config;
@@ -106,8 +106,8 @@ public:
   DepthPacketProcessor();
   virtual ~DepthPacketProcessor();
 
-  virtual void setFrameListener(libfreenect2::FrameListener *listener);
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setFrameListener(Freenect::FrameListener *listener);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length) = 0;
 
@@ -117,8 +117,8 @@ public:
   virtual void loadLookupTable(const short *lut) = 0;
 
 protected:
-  libfreenect2::DepthPacketProcessor::Config config_;
-  libfreenect2::FrameListener *listener_;
+  Freenect::DepthPacketProcessor::Config config_;
+  Freenect::FrameListener *listener_;
 };
 
 #ifdef LIBFREENECT2_WITH_OPENGL_SUPPORT
@@ -130,7 +130,7 @@ class OpenGLDepthPacketProcessor : public DepthPacketProcessor
 public:
   OpenGLDepthPacketProcessor(void *parent_opengl_context_ptr, bool debug);
   virtual ~OpenGLDepthPacketProcessor();
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length);
 
@@ -153,7 +153,7 @@ class CpuDepthPacketProcessor : public DepthPacketProcessor
 public:
   CpuDepthPacketProcessor();
   virtual ~CpuDepthPacketProcessor();
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length);
 
@@ -175,7 +175,7 @@ class OpenCLDepthPacketProcessor : public DepthPacketProcessor
 public:
   OpenCLDepthPacketProcessor(const int deviceId = -1);
   virtual ~OpenCLDepthPacketProcessor();
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length);
 
@@ -206,7 +206,7 @@ class OpenCLKdeDepthPacketProcessor : public DepthPacketProcessor
 public:
   OpenCLKdeDepthPacketProcessor(const int deviceId = -1);
   virtual ~OpenCLKdeDepthPacketProcessor();
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length);
 
@@ -232,7 +232,7 @@ class CudaDepthPacketProcessor : public DepthPacketProcessor
 public:
   CudaDepthPacketProcessor(const int deviceId = -1);
   virtual ~CudaDepthPacketProcessor();
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length);
 
@@ -262,7 +262,7 @@ class CudaKdeDepthPacketProcessor : public DepthPacketProcessor
 public:
   CudaKdeDepthPacketProcessor(const int deviceId = -1);
   virtual ~CudaKdeDepthPacketProcessor();
-  virtual void setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config);
+  virtual void setConfiguration(const Freenect::DepthPacketProcessor::Config &config);
 
   virtual void loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length);
 

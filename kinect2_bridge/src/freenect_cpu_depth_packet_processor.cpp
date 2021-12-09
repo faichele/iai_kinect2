@@ -27,6 +27,8 @@
 /** @file cpu_depth_packet_processor.cpp Depth processor implementation for the CPU. */
 
 #include <kinect2_bridge/freenect_depth_packet_processor.h>
+#include <kinect2_bridge/freenect_internal_response.h>
+
 //#include <libfreenect2/resource.h>
 //#include <libfreenect2/protocol/response.h>
 //#include <libfreenect2/logging.h>
@@ -258,7 +260,7 @@ void flipHorizontal(const Mat<ScalarT> &in, Mat<ScalarT>& out)
   }
 }
 
-namespace libfreenect2
+namespace Freenect
 {
 
 inline int bfi(int width, int offset, int src2, int src3)
@@ -813,7 +815,7 @@ CpuDepthPacketProcessor::~CpuDepthPacketProcessor()
   delete impl_;
 }
 
-void CpuDepthPacketProcessor::setConfiguration(const libfreenect2::DepthPacketProcessor::Config &config)
+void CpuDepthPacketProcessor::setConfiguration(const Freenect::DepthPacketProcessor::Config &config)
 {
   DepthPacketProcessor::setConfiguration(config);
   
@@ -831,9 +833,9 @@ void CpuDepthPacketProcessor::setConfiguration(const libfreenect2::DepthPacketPr
 void CpuDepthPacketProcessor::loadP0TablesFromCommandResponse(unsigned char* buffer, size_t buffer_length)
 {
   // TODO: check known header fields (headersize, tablesize)
-  libfreenect2::protocol::P0TablesResponse* p0table = (libfreenect2::protocol::P0TablesResponse*)buffer;
+    Freenect::protocol::P0TablesResponse* p0table = (Freenect::protocol::P0TablesResponse*)buffer;
 
-  if(buffer_length < sizeof(libfreenect2::protocol::P0TablesResponse))
+  if(buffer_length < sizeof(Freenect::protocol::P0TablesResponse))
   {
     std::cerr << "P0Table response too short!" << std::endl;
     return;
