@@ -25,15 +25,70 @@
 
 Kinect2Bridge::ImagePublisherOption Kinect2Bridge::emptyImagePublisherOption = Kinect2Bridge::ImagePublisherOption();
 
-Kinect2Bridge::Kinect2Bridge(bool readImages, const ros::NodeHandle &nh, const ros::NodeHandle &priv_nh)
+Kinect2Bridge::Kinect2Bridge(bool readImages, const ros::NodeHandle& nh, const ros::NodeHandle& priv_nh)
     : sizeColor(1920, 1080), sizeIr(512, 424), sizeLowRes(sizeColor.width / 2, sizeColor.height / 2),
-      // color(sizeColor.width, sizeColor.height, 4), nh(nh), priv_nh(priv_nh),
-      frameColor(0), frameIrDepth(0), pubFrameColor(0), pubFrameIrDepth(0), lastColor(0, 0), lastDepth(0, 0), nextColor(false),
-      nextIrDepth(false), depthShift(0), running(false), deviceActive(false), clientConnected(false),
-      imagePubOptionsRetrieved(false), m_readImages(readImages)
+    // color(sizeColor.width, sizeColor.height, 4), nh(nh), priv_nh(priv_nh),
+    frameColor(0), frameIrDepth(0), pubFrameColor(0), pubFrameIrDepth(0), lastColor(0, 0), lastDepth(0, 0), nextColor(false),
+    nextIrDepth(false), depthShift(0), running(false), deviceActive(false), clientConnected(false),
+    imagePubOptionsRetrieved(false), m_readImages(readImages)
 {
     status.resize(COUNT, UNSUBCRIBED);
 
+    keypoint_indices_to_joint_names_map[(int)JointType_SpineBase] = "SPINE_BASE";
+    keypoint_indices_to_joint_names_map[(int)JointType_SpineMid] = "SPINE_MID";
+    keypoint_indices_to_joint_names_map[(int)JointType_Neck] = "NECK";
+    keypoint_indices_to_joint_names_map[(int)JointType_Head] = "HEAD";
+    keypoint_indices_to_joint_names_map[(int)JointType_ShoulderLeft] = "SHOULDER_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_ElbowLeft] = "ELBOW_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_WristLeft] = "WRIST_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_HandLeft] = "HAND_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_ShoulderRight] = "SHOULDER_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_ElbowRight] = "ELBOW_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_WristRight] = "WRIST_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_HandRight] = "HAND_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_HipLeft] = "HIP_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_KneeLeft] = "KNEE_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_AnkleLeft] = "ANKLE_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_FootLeft] = "FOOT_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_HipRight] = "HIP_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_KneeRight] = "KNEE_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_AnkleRight] = "ANKLE_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_FootRight] = "FOOT_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_SpineShoulder] = "SPINE_SHOULDER";
+    keypoint_indices_to_joint_names_map[(int)JointType_HandTipLeft] = "HAND_TIP_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_ThumbLeft] = "THUMB_LEFT";
+    keypoint_indices_to_joint_names_map[(int)JointType_HandTipRight] = "HAND_TIP_RIGHT";
+    keypoint_indices_to_joint_names_map[(int)JointType_ThumbRight] = "THUMB_RIGHT";
+
+    bone_name_to_keypoint_indices_map["LowerSpine_0"] = std::make_pair<int, int>((int)JointType_SpineBase, (int)JointType_SpineMid);
+    bone_name_to_keypoint_indices_map["UpperSpine_1"] = std::make_pair<int, int>((int)JointType_SpineMid, (int)JointType_SpineShoulder);
+    bone_name_to_keypoint_indices_map["Neck_2"] = std::make_pair<int, int>((int)JointType_SpineShoulder, (int)JointType_Neck);
+    bone_name_to_keypoint_indices_map["Head_3"] = std::make_pair<int, int>((int)JointType_Neck, (int)JointType_Head);
+
+    bone_name_to_keypoint_indices_map["LeftShoulder_4"] = std::make_pair<int, int>((int)JointType_SpineShoulder, (int)JointType_ShoulderLeft);
+    bone_name_to_keypoint_indices_map["LeftUpperArm_5"] = std::make_pair<int, int>((int)JointType_ShoulderLeft, (int)JointType_ElbowLeft);
+    bone_name_to_keypoint_indices_map["LeftLowerArm_6"] = std::make_pair<int, int>((int)JointType_ElbowLeft, (int)JointType_WristLeft);
+    bone_name_to_keypoint_indices_map["LeftWrist_7"] = std::make_pair<int, int>((int)JointType_WristLeft, (int)JointType_HandLeft);
+    bone_name_to_keypoint_indices_map["LeftHandTip_8"] = std::make_pair<int, int>((int)JointType_HandLeft, (int)JointType_HandTipLeft);
+    bone_name_to_keypoint_indices_map["LeftThumb_9"] = std::make_pair<int, int>((int)JointType_HandLeft, (int)JointType_ThumbLeft);
+
+    bone_name_to_keypoint_indices_map["RightShoulder_10"] = std::make_pair<int, int>((int)JointType_SpineShoulder, (int)JointType_ShoulderRight);
+    bone_name_to_keypoint_indices_map["RightUpperArm_11"] = std::make_pair<int, int>((int)JointType_ShoulderRight, (int)JointType_ElbowRight);
+    bone_name_to_keypoint_indices_map["RightLowerArm_12"] = std::make_pair<int, int>((int)JointType_ElbowRight, (int)JointType_WristRight);
+    bone_name_to_keypoint_indices_map["RightWrist_13"] = std::make_pair<int, int>((int)JointType_WristRight, (int)JointType_HandRight);
+    bone_name_to_keypoint_indices_map["RightHandTip_14"] = std::make_pair<int, int>((int)JointType_HandRight, (int)JointType_HandTipRight);
+    bone_name_to_keypoint_indices_map["RightThumb_15"] = std::make_pair<int, int>((int)JointType_HandRight, (int)JointType_ThumbRight);
+
+    bone_name_to_keypoint_indices_map["LeftHip_16"] = std::make_pair<int, int>((int)JointType_SpineBase, (int)JointType_HipLeft);
+    bone_name_to_keypoint_indices_map["LeftFemur_17"] = std::make_pair<int, int>((int)JointType_HipLeft, (int)JointType_KneeLeft);
+    bone_name_to_keypoint_indices_map["LeftShank_18"] = std::make_pair<int, int>((int)JointType_KneeLeft, (int)JointType_AnkleLeft);
+    bone_name_to_keypoint_indices_map["LeftFoot_19"] = std::make_pair<int, int>((int)JointType_AnkleLeft, (int)JointType_FootLeft);
+
+    bone_name_to_keypoint_indices_map["RightHip_20"] = std::make_pair<int, int>((int)JointType_SpineBase, (int)JointType_HipRight);
+    bone_name_to_keypoint_indices_map["RightFemur_21"] = std::make_pair<int, int>((int)JointType_HipRight, (int)JointType_KneeRight);
+    bone_name_to_keypoint_indices_map["RightShank_22"] = std::make_pair<int, int>((int)JointType_KneeRight, (int)JointType_AnkleRight);
+    bone_name_to_keypoint_indices_map["RightFoot_23"] = std::make_pair<int, int>((int)JointType_AnkleRight, (int)JointType_FootRight);
+    
     m_d.reset(new Kinect2BridgePrivate(m_readImages));
 }
 
@@ -1202,25 +1257,26 @@ void Kinect2Bridge::main()
 
                 if (m_d->body_frames_received)
                 {
-                    bb_kinect2_msgs::TrackingStates tracking_states_msg;
+                    bb_persons_msgs::TrackingStates tracking_states_msg;
                     tracking_states_msg.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
                     for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
                         tracking_states_msg.tracking_states[k] = m_d->m_userTrackingStatus[k];
 
                     m_d->m_trackingStatesPub.publish(tracking_states_msg);
 
+                    bb_persons_msgs::Persons persons_msg;
                     for (std::map<unsigned int, Kinect2SkeletonData>::const_iterator it = m_d->m_trackedUsers.begin(); it != m_d->m_trackedUsers.end(); it++)
                     {
-                        bb_kinect2_msgs::Person person_msg;
+                        bb_persons_msgs::Person person_msg;
                         person_msg.tracking_id = it->second.trackingId;
                         person_msg.tracking_index = it->second.trackingIndex;
 
-                        person_msg.tracking_states.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
+                        /*person_msg.tracking_states.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
                         for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
-                            person_msg.tracking_states.tracking_states[k] = m_d->m_userTrackingStatus[k];
+                            person_msg.tracking_states.tracking_states[k] = m_d->m_userTrackingStatus[k];*/
 
-                        person_msg.header.stamp = ros::Time::now();
-                        person_msg.header.frame_id = "kinect2_link";
+                        //person_msg.header.stamp = ros::Time::now();
+                        //person_msg.header.frame_id = "kinect2_link";
 
                         for (int k = 0; k < JointType_Count; k++)
                         {
@@ -1237,8 +1293,10 @@ void Kinect2Bridge::main()
                             person_msg.joints2D.push_back(point_k_2d);
                         }
 
-                        m_d->m_bodyFramesPub.publish(person_msg);
+                        persons_msg.persons.push_back(person_msg);
                     }
+
+                    m_d->m_bodyFramesPub.publish(persons_msg);
                 }
 
                 queryRate.sleep();

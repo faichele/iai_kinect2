@@ -163,14 +163,14 @@ bool Kinect2BridgePrivate::initDevice(const std::string& sensor)
 
                 rgb_image = new unsigned char[cColorWidth * cColorHeight * 4];
 
-                m_pointCloudPub = m_rosNode.advertise<sensor_msgs::PointCloud2>("/kinect2/point_cloud", 10);
+                m_pointCloudPub = m_rosNode.advertise<sensor_msgs::PointCloud2>("point_cloud", 10);
 
                 m_userTrackingStatus.resize(cMaxTrackedUsers);
                 for (size_t k = 0; k < cMaxTrackedUsers; k++)
                     m_userTrackingStatus[k] = false;
 
-                m_bodyFramesPub = m_rosNode.advertise<bb_kinect2_msgs::Person>("/kinect2/tracking_data", 10);
-                m_trackingStatesPub = m_rosNode.advertise<bb_kinect2_msgs::TrackingStates>("/kinect2/tracking_states", 10);
+                m_bodyFramesPub = m_rosNode.advertise<bb_persons_msgs::Persons>("tracking_data", 10);
+                //m_trackingStatesPub = m_rosNode.advertise<bb_kinect2_msgs::TrackingStates>("/kinect2/tracking_states", 10);
 
                 m_pointCloud = boost::make_shared<pcl::PointCloud<pcl::PointXYZRGBA>>();
                 m_pointCloud->width = static_cast<uint32_t>(cDepthWidth);

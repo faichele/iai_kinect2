@@ -206,6 +206,9 @@ private:
 
     boost::shared_ptr<Kinect2BridgePrivate> m_d;
 
+    std::map<int, std::string> keypoint_indices_to_joint_names_map;
+    std::map<std::string, std::pair<int, int>> bone_name_to_keypoint_indices_map;
+
     std::string kinect_sensor;
 
     std::vector<int> compressionParams;
