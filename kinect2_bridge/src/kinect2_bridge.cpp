@@ -1257,17 +1257,17 @@ void Kinect2Bridge::main()
 
                 if (m_d->body_frames_received)
                 {
-                    bb_persons_msgs::TrackingStates tracking_states_msg;
+                    bb_person_msgs::TrackingStates tracking_states_msg;
                     tracking_states_msg.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
                     for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
                         tracking_states_msg.tracking_states[k] = m_d->m_userTrackingStatus[k];
 
                     m_d->m_trackingStatesPub.publish(tracking_states_msg);
 
-                    bb_persons_msgs::Persons persons_msg;
+                    bb_person_msgs::Persons persons_msg;
                     for (std::map<unsigned int, Kinect2SkeletonData>::const_iterator it = m_d->m_trackedUsers.begin(); it != m_d->m_trackedUsers.end(); it++)
                     {
-                        bb_persons_msgs::Person person_msg;
+                        bb_person_msgs::Person person_msg;
                         person_msg.tracking_id = it->second.trackingId;
                         person_msg.tracking_index = it->second.trackingIndex;
 

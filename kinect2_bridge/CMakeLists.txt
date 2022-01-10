@@ -29,11 +29,15 @@ if (UNIX)
 elseif (WIN32)
 	find_package(Kinect2SDK REQUIRED)
     find_package(Qt5Core REQUIRED)
-    find_package(Qt5WinExtras REQUIRED)
+	find_package(Qt5Gui REQUIRED)
+    # find_package(Qt5WinExtras REQUIRED)
 	find_package(LibFreenect2 REQUIRED)
+
+	message(STATUS "Qt5Core libraries: ${QT5Core_LIBRARIES}")
+	message(STATUS "Qt5Gui libraries: ${QT5Gui_LIBRARIES}")
 endif()
 
-find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration bb_persons_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport bb_person_msgs kinect2_registration )
 
 ## System dependencies are found with CMake's conventions
 find_package(LibUSB REQUIRED)
@@ -160,8 +164,10 @@ target_link_libraries(kinect2_bridge_nodelet
   ${LibFreenect2_LIBRARIES}
   ${kinect2_registration_LIBRARY}
   ${KinectSDK2_LIBRARIES}
-  ${Qt5Core_LIBRARIES}
-  ${Qt5WinExtras_LIBRARIES}
+  Qt5::Core
+  Qt5::Gui
+  $ENV{ROS_ROOT}/../../Lib/Qt5Gui.lib
+  # ${Qt5WinExtras_LIBRARIES}
   ${PCL_LIBRARIES}
   ${LibUSB_LIBRARIES}
   ${TurboJPEG_LIBRARIES}
@@ -175,8 +181,10 @@ target_link_libraries(kinect2_bridge
   ${LibFreenect2_LIBRARIES}
   ${kinect2_registration_LIBRARY}
   ${KinectSDK2_LIBRARIES}
-  ${Qt5Core_LIBRARIES}
-  ${Qt5WinExtras_LIBRARIES}
+  Qt5::Core
+  Qt5::Gui
+  $ENV{ROS_ROOT}/../../Lib/Qt5Gui.lib
+  # ${Qt5WinExtras_LIBRARIES}
   ${LibUSB_LIBRARIES}
   ${TurboJPEG_LIBRARIES}
 )

@@ -35,8 +35,9 @@
 
 #include <rviz/message_filter_display.h>
 #include <ros/ros.h>
-#include <bb_kinect2_msgs/Person.h>
-#include <bb_kinect2_msgs/TrackingStates.h>
+#include <bb_person_msgs/Person.h>
+#include <bb_person_msgs/Persons.h>
+#include <bb_person_msgs/TrackingStates.h>
 #endif
 
 namespace Ogre
@@ -54,7 +55,7 @@ namespace rviz
 namespace bb_kinect2_rviz
 {
     class PersonVisual;
-    class PersonsDisplay: public rviz::MessageFilterDisplay<bb_kinect2_msgs::Person>
+    class PersonsDisplay: public rviz::MessageFilterDisplay<bb_person_msgs::Persons>
     {
         Q_OBJECT
         public:
@@ -82,8 +83,8 @@ namespace bb_kinect2_rviz
 
             // Function to handle an incoming ROS message.
         private:
-            void processMessage(const bb_kinect2_msgs::Person::ConstPtr& msg);
-            void processTrackingStates(const bb_kinect2_msgs::TrackingStates::ConstPtr& msg);
+            void processMessage(const bb_person_msgs::Persons::ConstPtr& msg);
+            void processTrackingStates(const bb_person_msgs::TrackingStates::ConstPtr& msg);
 
             // Storage for the list of Person visuals.
             std::vector<boost::shared_ptr<PersonVisual>> visuals_;

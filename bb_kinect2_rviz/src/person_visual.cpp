@@ -70,10 +70,10 @@ PersonVisual::~PersonVisual()
   scene_manager_->destroySceneNode(frame_node_);
 }
 
-void PersonVisual::setMessage(const bb_kinect2_msgs::Person::ConstPtr& msg)
+void PersonVisual::setMessage(const bb_person_msgs::Persons::ConstPtr& msg)
 {
-    ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "New Person message arrived, tracking ID: " << msg->tracking_id);
-    for (unsigned int k = 0; k < JointType_Count; k++)
+    ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "New Persons message arrived.");
+    /*for (unsigned int k = 0; k < JointType_Count; k++)
     {
         Ogre::Vector3 jointPos(msg->joints3D[k].x, msg->joints3D[k].y, msg->joints3D[k].z);
         joint_spheres_[k]->setPosition(jointPos);
@@ -115,10 +115,10 @@ void PersonVisual::setMessage(const bb_kinect2_msgs::Person::ConstPtr& msg)
     updateLimbArrow(msg, JointType_SpineBase, JointType_HipRight, 20);
     updateLimbArrow(msg, JointType_HipRight, JointType_KneeRight, 21);
     updateLimbArrow(msg, JointType_KneeRight, JointType_AnkleRight, 22);
-    updateLimbArrow(msg, JointType_AnkleRight, JointType_FootRight, 23);
+    updateLimbArrow(msg, JointType_AnkleRight, JointType_FootRight, 23);*/
 }
 
-void PersonVisual::updateLimbArrow(const bb_kinect2_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index)
+void PersonVisual::updateLimbArrow(const bb_person_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index)
 {
     if (arrow_index < limb_arrows_.size())
     {

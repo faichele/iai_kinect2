@@ -30,7 +30,8 @@
 #ifndef PERSON_VISUAL_H
 #define PERSON_VISUAL_H
 
-#include <bb_kinect2_msgs/Person.h>
+#include <bb_person_msgs/Person.h>
+#include <bb_person_msgs/Persons.h>
 #include <Ogre/Ogre.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <tf2_ros/transform_broadcaster.h>
@@ -86,7 +87,7 @@ namespace bb_kinect2_rviz
             virtual ~PersonVisual();
 
             // Configure the visual to show the data in the message.
-            void setMessage(const bb_kinect2_msgs::Person::ConstPtr& msg);
+            void setMessage(const bb_person_msgs::Persons::ConstPtr& msg);
 
             // Set the pose of the coordinate frame the message refers to.
             void setFramePosition(const Ogre::Vector3& position);
@@ -104,7 +105,7 @@ namespace bb_kinect2_rviz
             void createPersonShapes();
 
             std::string jointNameFromJointID(JointType type, int tracking_id = -1, int tracking_index = -1);
-            void updateLimbArrow(const bb_kinect2_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index);
+            void updateLimbArrow(const bb_person_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index);
 
             // The objects implementing the actual "stick figure" representing a person
             std::vector<boost::shared_ptr<rviz::Shape>> joint_spheres_;

@@ -9,7 +9,7 @@
   
   <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>bb_kinect2_msgs</build_depend>
+  <build_depend>bb_person_msgs</build_depend>
   <build_depend>qtbase5-dev</build_depend>
   <build_depend>rviz</build_depend>
   <run_depend>bb_kinect2_msgs</run_depend>	

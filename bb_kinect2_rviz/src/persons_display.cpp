@@ -82,12 +82,12 @@ void PersonsDisplay::onInitialize()
     MFDClass::onInitialize();
 
     // Pre-allocate Person visuals up to the max. number of persons a Kinect2 can track
-    for (unsigned int k = 0; k < num_max_persons_; k++)
+    /*for (unsigned int k = 0; k < num_max_persons_; k++)
     {
         boost::shared_ptr<bb_kinect2_rviz::PersonVisual> person_visual;
         person_visual.reset(new PersonVisual(context_->getSceneManager(), scene_node_));
         visuals_.push_back(person_visual);
-    }
+    }*/
 }
 
 PersonsDisplay::~PersonsDisplay()
@@ -142,29 +142,29 @@ void PersonsDisplay::updateCylinderRadius()
     }
 }
 
-void PersonsDisplay::processTrackingStates(const bb_kinect2_msgs::TrackingStates::ConstPtr& msg)
+void PersonsDisplay::processTrackingStates(const bb_person_msgs::TrackingStates::ConstPtr& msg)
 {
     ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "Received new TrackingStates message.");
-    for (size_t k = 0; k < msg->tracking_states.size(); k++)
+    /*for (size_t k = 0; k < msg->tracking_states.size(); k++)
     {
         if (k < visuals_.size())
         {
             visuals_[k]->setVisible(msg->tracking_states[k]);
         }
-    }
+    }*/
 
 }
 
 // This is our callback to handle an incoming message.
-void PersonsDisplay::processMessage(const bb_kinect2_msgs::Person::ConstPtr& msg)
+void PersonsDisplay::processMessage(const bb_person_msgs::Persons::ConstPtr& msg)
 {
-    ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "Received new Person message, tracking ID: " << msg->tracking_id);
+    ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "Received new Persons message.");
     // Here we call the rviz::FrameManager to get the transform from the
     // fixed frame to the frame in the header of this Imu message.  If
     // it fails, we can't do anything else so we return.
     Ogre::Quaternion orientation;
     Ogre::Vector3 position;
-    if (!context_->getFrameManager()->getTransform(msg->header.frame_id,
+    /*if (!context_->getFrameManager()->getTransform(msg->header.frame_id,
                                                   msg->header.stamp,
                                                   position, orientation))
     {
@@ -183,7 +183,7 @@ void PersonsDisplay::processMessage(const bb_kinect2_msgs::Person::ConstPtr& msg
 
     float alpha = alpha_property_->getFloat();
     Ogre::ColourValue color = color_property_->getOgreColor();
-    visual->setColor(color.r, color.g, color.b, alpha);
+    visual->setColor(color.r, color.g, color.b, alpha);*/
 }
 
 // Tell pluginlib about this class.  It is important to do this in

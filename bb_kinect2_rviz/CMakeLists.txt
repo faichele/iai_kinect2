@@ -3,7 +3,7 @@ project(bb_kinect2_rviz)
 
 set(rviz_DIR $ENV{ROS_ROOT}/../rviz/cmake)
 
-find_package(catkin REQUIRED COMPONENTS rviz)
+find_package(catkin REQUIRED COMPONENTS rviz bb_person_msgs)
 catkin_package()
 
 include_directories(${catkin_INCLUDE_DIRS})
