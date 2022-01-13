@@ -32,7 +32,7 @@
 
 #include <bb_person_msgs/Person.h>
 #include <bb_person_msgs/Persons.h>
-#include <Ogre/Ogre.h>
+#include <OGRE/Ogre.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <tf2_ros/transform_broadcaster.h>
 
