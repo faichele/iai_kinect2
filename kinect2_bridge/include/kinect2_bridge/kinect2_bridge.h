@@ -60,7 +60,10 @@
 #include <kinect2_registration/kinect2_registration.h>
 #include <kinect2_registration/kinect2_console.h>
 #include <cv_bridge/cv_bridge.h>
-#include <bb_kinect2_msgs/CameraIntrinsics.h>
+
+#include <bb_person_msgs/TrackingStates.h>
+#include <bb_person_msgs/Person.h>
+#include <bb_person_msgs/Persons.h>
 
 #include <boost/thread/mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
@@ -254,6 +257,8 @@ private:
     static ImagePublisherOption emptyImagePublisherOption;
     bool imagePubOptionsRetrieved;
     std::vector<ImagePublisherOption> imagePublisherOptions;
+
+    void populateTrackedPersonMessage(const std::string& bone_name, const unsigned int person_index, bb_person_msgs::Person& person_msg);
 };
 
 class Kinect2BridgeNodelet : public nodelet::Nodelet

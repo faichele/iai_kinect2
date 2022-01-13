@@ -28,9 +28,9 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 
-#include <bb_persons_msgs/Person.h>
-#include <bb_persons_msgs/Persons.h>
-#include <bb_persons_msgs/TrackingStates.h>
+#include <bb_person_msgs/Person.h>
+#include <bb_person_msgs/Persons.h>
+#include <bb_person_msgs/TrackingStates.h>
 
 #include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>

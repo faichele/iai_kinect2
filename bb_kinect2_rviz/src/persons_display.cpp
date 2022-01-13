@@ -82,12 +82,14 @@ void PersonsDisplay::onInitialize()
     MFDClass::onInitialize();
 
     // Pre-allocate Person visuals up to the max. number of persons a Kinect2 can track
-    /*for (unsigned int k = 0; k < num_max_persons_; k++)
+    for (unsigned int k = 0; k < num_max_persons_; k++)
     {
         boost::shared_ptr<bb_kinect2_rviz::PersonVisual> person_visual;
         person_visual.reset(new PersonVisual(context_->getSceneManager(), scene_node_));
+     
+        person_visual->setTrackingID(k);
         visuals_.push_back(person_visual);
-    }*/
+    }
 }
 
 PersonsDisplay::~PersonsDisplay()
@@ -145,13 +147,13 @@ void PersonsDisplay::updateCylinderRadius()
 void PersonsDisplay::processTrackingStates(const bb_person_msgs::TrackingStates::ConstPtr& msg)
 {
     ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "Received new TrackingStates message.");
-    /*for (size_t k = 0; k < msg->tracking_states.size(); k++)
+    for (size_t k = 0; k < msg->tracking_states.size(); k++)
     {
         if (k < visuals_.size())
         {
             visuals_[k]->setVisible(msg->tracking_states[k]);
         }
-    }*/
+    }
 
 }
 
@@ -164,7 +166,7 @@ void PersonsDisplay::processMessage(const bb_person_msgs::Persons::ConstPtr& msg
     // it fails, we can't do anything else so we return.
     Ogre::Quaternion orientation;
     Ogre::Vector3 position;
-    /*if (!context_->getFrameManager()->getTransform(msg->header.frame_id,
+    if (!context_->getFrameManager()->getTransform(msg->header.frame_id,
                                                   msg->header.stamp,
                                                   position, orientation))
     {
@@ -174,16 +176,23 @@ void PersonsDisplay::processMessage(const bb_person_msgs::Persons::ConstPtr& msg
 
     // We are keeping a circular buffer of visual pointers.  This gets
     // the next one, or creates and stores it if the buffer is not full
-    boost::shared_ptr<PersonVisual> visual = visuals_.at(msg->tracking_id);
+    for (unsigned int k = 0; k < msg->persons.size(); k++)
+    {
+        if (k < visuals_.size())
+        {
+            boost::shared_ptr<PersonVisual> visual = visuals_.at(k);
 
-    // Now set or update the contents of the chosen visual.
-    visual->setMessage(msg);
-    visual->setFramePosition(position);
-    visual->setFrameOrientation(orientation);
+            // Now set or update the contents of the chosen visual.
+            visual->setMessage(msg->persons[k]);
+            visual->setFramePosition(position);
+            visual->setFrameOrientation(orientation);
 
-    float alpha = alpha_property_->getFloat();
-    Ogre::ColourValue color = color_property_->getOgreColor();
-    visual->setColor(color.r, color.g, color.b, alpha);*/
+            float alpha = alpha_property_->getFloat();
+            Ogre::ColourValue color = color_property_->getOgreColor();
+            visual->setColor(color.r, color.g, color.b, alpha);
+        }
+    }
+    
 }
 
 // Tell pluginlib about this class.  It is important to do this in

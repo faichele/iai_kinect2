@@ -97,6 +97,31 @@ Kinect2Bridge::~Kinect2Bridge()
 
 }
 
+void Kinect2Bridge::populateTrackedPersonMessage(const std::string& bone_name, const unsigned int person_index, bb_person_msgs::Person& person_msg)
+{
+    if (bone_name_to_keypoint_indices_map.find(bone_name) != bone_name_to_keypoint_indices_map.end())
+    {
+        if (m_d->m_trackedUsers.find(person_index) != m_d->m_trackedUsers.end())
+        {
+            bb_person_msgs::BodySegment bodySegment;
+
+            bodySegment.segment_name = bone_name;
+            bodySegment.start_index = bone_name_to_keypoint_indices_map[bone_name].first;
+            bodySegment.end_index = bone_name_to_keypoint_indices_map[bone_name].second;
+
+            bodySegment.start_point.x = m_d->m_trackedUsers[person_index].jointPositions3D[bone_name_to_keypoint_indices_map[bone_name].first].x();
+            bodySegment.start_point.y = m_d->m_trackedUsers[person_index].jointPositions3D[bone_name_to_keypoint_indices_map[bone_name].first].y();
+            bodySegment.start_point.z = m_d->m_trackedUsers[person_index].jointPositions3D[bone_name_to_keypoint_indices_map[bone_name].first].z();
+            
+            bodySegment.end_point.x = m_d->m_trackedUsers[person_index].jointPositions3D[bone_name_to_keypoint_indices_map[bone_name].second].x();
+            bodySegment.end_point.y = m_d->m_trackedUsers[person_index].jointPositions3D[bone_name_to_keypoint_indices_map[bone_name].second].y();
+            bodySegment.end_point.z = m_d->m_trackedUsers[person_index].jointPositions3D[bone_name_to_keypoint_indices_map[bone_name].second].z();
+
+            person_msg.body_segments.push_back(bodySegment);
+        }
+    }
+}
+
 bool Kinect2Bridge::start()
 {
     if (running)
@@ -1271,6 +1296,35 @@ void Kinect2Bridge::main()
                         person_msg.tracking_id = it->second.trackingId;
                         person_msg.tracking_index = it->second.trackingIndex;
 
+                        populateTrackedPersonMessage("LowerSpine_0", it->first, person_msg);
+                        populateTrackedPersonMessage("UpperSpine_1", it->first, person_msg);
+                        populateTrackedPersonMessage("Neck_2", it->first, person_msg);
+                        populateTrackedPersonMessage("Head_3", it->first, person_msg);
+
+                        populateTrackedPersonMessage("LeftShoulder_4", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftUpperArm_5", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftLowerArm_6", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftWrist_7", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftHandTip_8", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftThumb_9", it->first, person_msg);
+
+                        populateTrackedPersonMessage("RightShoulder_10", it->first, person_msg);
+                        populateTrackedPersonMessage("RightUpperArm_11", it->first, person_msg);
+                        populateTrackedPersonMessage("RightLowerArm_12", it->first, person_msg);
+                        populateTrackedPersonMessage("RightWrist_13", it->first, person_msg);
+                        populateTrackedPersonMessage("RightHandTip_14", it->first, person_msg);
+                        populateTrackedPersonMessage("RightThumb_15", it->first, person_msg);
+
+                        populateTrackedPersonMessage("LeftHip_16", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftFemur_17", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftShank_18", it->first, person_msg);
+                        populateTrackedPersonMessage("LeftFoot_19", it->first, person_msg);
+
+                        populateTrackedPersonMessage("RightHip_20", it->first, person_msg);
+                        populateTrackedPersonMessage("RightFemur_21", it->first, person_msg);
+                        populateTrackedPersonMessage("RightShank_22", it->first, person_msg);
+                        populateTrackedPersonMessage("RightFoot_23", it->first, person_msg);
+                        
                         /*person_msg.tracking_states.tracking_states.resize(Kinect2BridgePrivate::cMaxTrackedUsers);
                         for (size_t k = 0; k < Kinect2BridgePrivate::cMaxTrackedUsers; k++)
                             person_msg.tracking_states.tracking_states[k] = m_d->m_userTrackingStatus[k];*/
@@ -1278,7 +1332,7 @@ void Kinect2Bridge::main()
                         //person_msg.header.stamp = ros::Time::now();
                         //person_msg.header.frame_id = "kinect2_link";
 
-                        for (int k = 0; k < JointType_Count; k++)
+                        /*for (int k = 0; k < JointType_Count; k++)
                         {
                             geometry_msgs::Point point_k;
                             point_k.x = it->second.jointPositions3D[k].x();
@@ -1291,7 +1345,7 @@ void Kinect2Bridge::main()
                             point_k_2d.y = it->second.jointPositions2D[k].y();
                             point_k_2d.z = 0.0;
                             person_msg.joints2D.push_back(point_k_2d);
-                        }
+                        }*/
 
                         persons_msg.persons.push_back(person_msg);
                     }

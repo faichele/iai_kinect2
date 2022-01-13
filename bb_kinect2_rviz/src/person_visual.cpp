@@ -41,7 +41,7 @@
 
 using namespace bb_kinect2_rviz;
 
-PersonVisual::PersonVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node)
+PersonVisual::PersonVisual(Ogre::SceneManager* scene_manager, Ogre::SceneNode* parent_node): tracking_id_(0)
 {
   scene_manager_ = scene_manager;
 
@@ -70,7 +70,12 @@ PersonVisual::~PersonVisual()
   scene_manager_->destroySceneNode(frame_node_);
 }
 
-void PersonVisual::setMessage(const bb_person_msgs::Persons::ConstPtr& msg)
+void PersonVisual::setTrackingID(const unsigned int tracking_id)
+{
+    tracking_id_ = tracking_id;
+}
+
+void PersonVisual::setMessage(const bb_person_msgs::Person& msg)
 {
     ROS_INFO_STREAM_NAMED("bb_kinect2_rviz", "New Persons message arrived.");
     /*for (unsigned int k = 0; k < JointType_Count; k++)
@@ -86,9 +91,26 @@ void PersonVisual::setMessage(const bb_person_msgs::Persons::ConstPtr& msg)
         joint_transforms_[k]->transform.translation.z = msg->joints3D[k].z;
 
         tf_broadcaster_->sendTransform(*joint_transforms_[k]);
+    }*/
+
+    for (unsigned int k = 0; k < msg.body_segments.size(); k++)
+    {
+        Ogre::Vector3 jointPos(msg.body_segments[k].start_point.x, msg.body_segments[k].start_point.y, msg.body_segments[k].start_point.z);
+        joint_spheres_[k]->setPosition(jointPos);
+
+        joint_transforms_[k]->header.stamp = ros::Time::now();
+        joint_transforms_[k]->child_frame_id = jointNameFromJointID((JointType)k, msg.tracking_id, msg.tracking_index);
+
+        joint_transforms_[k]->transform.translation.x = msg.body_segments[k].start_point.x;
+        joint_transforms_[k]->transform.translation.y = msg.body_segments[k].start_point.y;
+        joint_transforms_[k]->transform.translation.z = msg.body_segments[k].start_point.z;
+
+        tf_broadcaster_->sendTransform(*joint_transforms_[k]);
+
+        updateLimbArrow(msg, k);
     }
 
-    updateLimbArrow(msg, JointType_SpineBase, JointType_SpineMid, 0);
+    /*updateLimbArrow(msg, JointType_SpineBase, JointType_SpineMid, 0);
     updateLimbArrow(msg, JointType_SpineMid, JointType_SpineShoulder, 1);
     updateLimbArrow(msg, JointType_SpineShoulder, JointType_Neck, 2);
     updateLimbArrow(msg, JointType_Neck, JointType_Head, 3);
@@ -118,12 +140,12 @@ void PersonVisual::setMessage(const bb_person_msgs::Persons::ConstPtr& msg)
     updateLimbArrow(msg, JointType_AnkleRight, JointType_FootRight, 23);*/
 }
 
-void PersonVisual::updateLimbArrow(const bb_person_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index)
+void PersonVisual::updateLimbArrow(const bb_person_msgs::Person& msg, unsigned int arrow_index)
 {
     if (arrow_index < limb_arrows_.size())
     {
-        Ogre::Vector3 point1(msg->joints3D[start].x, msg->joints3D[start].y, msg->joints3D[start].z);
-        Ogre::Vector3 point2(msg->joints3D[end].x, msg->joints3D[end].y, msg->joints3D[end].z);
+        Ogre::Vector3 point1(msg.body_segments[arrow_index].start_point.x, msg.body_segments[arrow_index].start_point.y, msg.body_segments[arrow_index].start_point.z);
+        Ogre::Vector3 point2(msg.body_segments[arrow_index].end_point.x, msg.body_segments[arrow_index].end_point.y, msg.body_segments[arrow_index].end_point.z);
 
         Ogre::Vector3 direction = point2 - point1;
         float distance = direction.length();

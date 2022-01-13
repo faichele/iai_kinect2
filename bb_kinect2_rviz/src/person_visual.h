@@ -87,7 +87,7 @@ namespace bb_kinect2_rviz
             virtual ~PersonVisual();
 
             // Configure the visual to show the data in the message.
-            void setMessage(const bb_person_msgs::Persons::ConstPtr& msg);
+            void setMessage(const bb_person_msgs::Person& msg);
 
             // Set the pose of the coordinate frame the message refers to.
             void setFramePosition(const Ogre::Vector3& position);
@@ -101,11 +101,13 @@ namespace bb_kinect2_rviz
 
             void setVisible(bool visible);
 
+            void setTrackingID(const unsigned int tracking_id);
+
         private:
             void createPersonShapes();
 
             std::string jointNameFromJointID(JointType type, int tracking_id = -1, int tracking_index = -1);
-            void updateLimbArrow(const bb_person_msgs::Person::ConstPtr& msg, JointType start, JointType end, unsigned int arrow_index);
+            void updateLimbArrow(const bb_person_msgs::Person& msg, unsigned int arrow_index);
 
             // The objects implementing the actual "stick figure" representing a person
             std::vector<boost::shared_ptr<rviz::Shape>> joint_spheres_;
@@ -121,6 +123,8 @@ namespace bb_kinect2_rviz
             // The SceneManager, kept here only so the destructor can ask it to
             // destroy the ``frame_node_``.
             Ogre::SceneManager* scene_manager_;
+
+            unsigned int tracking_id_;
 };
 
 }

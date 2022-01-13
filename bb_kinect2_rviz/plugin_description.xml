@@ -5,6 +5,6 @@
     <description>
       Displays persons tracked by a Kinect2 sensor.
     </description>
-    <message_type>bb_kinect2_msgs/Person</message_type>
+    <message_type>bb_person_msgs/Persons</message_type>
   </class>
 </library>
