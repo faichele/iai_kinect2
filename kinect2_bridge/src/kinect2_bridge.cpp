@@ -1296,6 +1296,9 @@ void Kinect2Bridge::main()
                         person_msg.tracking_id = it->second.trackingId;
                         person_msg.tracking_index = it->second.trackingIndex;
 
+                        person_msg.header.stamp = ros::Time::now();
+                        person_msg.header.frame_id = "kinect2_link";
+
                         populateTrackedPersonMessage("LowerSpine_0", it->first, person_msg);
                         populateTrackedPersonMessage("UpperSpine_1", it->first, person_msg);
                         populateTrackedPersonMessage("Neck_2", it->first, person_msg);
@@ -1350,6 +1353,8 @@ void Kinect2Bridge::main()
                         persons_msg.persons.push_back(person_msg);
                     }
 
+                    persons_msg.header.stamp = ros::Time::now();
+                    persons_msg.header.frame_id = "kinect2_link";
                     m_d->m_bodyFramesPub.publish(persons_msg);
                 }
 
